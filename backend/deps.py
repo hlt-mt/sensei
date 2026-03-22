@@ -2,9 +2,9 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
-from app.database import SessionLocal
-from app.models import User
-from app.security import AuthError, decode_token
+from backend.database import SessionLocal
+from backend.models import User
+from backend.security import AuthError, decode_token
 
 # Keep token URL relative so Swagger/OpenAPI respects root_path (e.g. /subtitles-admin).
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")

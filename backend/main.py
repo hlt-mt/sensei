@@ -7,11 +7,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
-from app.database import Base, engine
-from app.deps import get_admin_user, get_current_user, get_db
-from app.models import Project, User
-from app.schemas import (
+from backend.config import get_settings
+from backend.database import Base, engine
+from backend.deps import get_admin_user, get_current_user, get_db
+from backend.models import Project, User
+from backend.schemas import (
     MeOut,
     ProjectCreate,
     ProjectOut,
@@ -21,7 +21,7 @@ from app.schemas import (
     UserOut,
     UserUpdate,
 )
-from app.security import (
+from backend.security import (
     create_access_token,
     generate_password,
     get_password_hash,
@@ -34,7 +34,7 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
-    from app.database import SessionLocal
+    from backend.database import SessionLocal
 
     db = SessionLocal()
     try:
@@ -204,7 +204,7 @@ async def refresh_token_middleware(request, call_next):
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header.split(" ", 1)[1].strip()
-        from app.security import decode_token, AuthError
+        from backend.security import decode_token, AuthError
 
         try:
             subject = decode_token(token)

@@ -1,6 +1,6 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue'
-import { AVWaveform } from 'vue-audio-visual'
+import { ref, computed, onMounted, onUnmounted, watch, inject, nextTick } from 'vue'
+import WaveSurfer from 'wavesurfer.js'
 
 const props = defineProps({
   duration: Number,
@@ -10,7 +10,15 @@ const props = defineProps({
   pixelsPerSecond: {
     type: Number,
     default: 80
-  }
+  },
+  activeTrack: {
+    type: String,
+    default: null
+  },
+  waveformHeight: { 
+    type: Number, 
+    default: 60 
+  } 
 })
 
 const emit = defineEmits(['update:subtitles', 'update:tranSubtitles', 'update:activeTrack'])
@@ -21,6 +29,9 @@ const isPlaying = ref(false)
 const videoSrc = ref('')
 const waveformKey = ref(0)
 const isDragging = ref(false)
+const playheadDragStartX = ref(0)
+const isPlayheadActuallyDragging = ref(false)
+const PLAYHEAD_DRAG_THRESHOLD = 5
 const draggingSubtitle = ref(null)
 const resizingSubtitle = ref(null)
 const resizeEdge = ref(null) 
@@ -30,8 +41,122 @@ const dragStartDuration = ref(0)
 const subtitleType = ref(null)
 const isClick = ref(true)
 const snapshotSaved = ref(false)
+const wavesurferInstance = ref(null)
+const waveformContainer = ref(null)
 
-const activeSidebarTrack = ref('tran')
+const stopAtTime = ref(null)
+
+// ─── Track availability ───────────────────────────────────────────────────────
+const hasOriginal = computed(() => props.subtitles && props.subtitles.length > 0)
+const hasTranslation = computed(() => props.tranSubtitles && props.tranSubtitles.length > 0)
+
+// ─── Dynamic layout rows based on which tracks exist ─────────────────────────
+// Row heights: waveform=60px, orig=60px, tran=60px
+// top offsets for subtitle blocks depend on which tracks are visible
+const origTop = computed(() => `${props.waveformHeight + 10}px`)
+const tranTop = computed(() =>
+  hasOriginal.value
+    ? `${props.waveformHeight + 10 + TRACK_HEIGHT}px`
+    : `${props.waveformHeight + 10}px`
+)
+
+const trackAreaHeight = computed(() => {
+  const wh = props.waveformHeight + 10
+  if (hasOriginal.value && hasTranslation.value) return `${wh + TRACK_HEIGHT * 2}px`
+  if (hasOriginal.value || hasTranslation.value) return `${wh + TRACK_HEIGHT}px`
+  return `${wh}px`
+})
+
+const isLightMode = ref(document.body.classList.contains('light-mode'))
+
+const themeObserver = new MutationObserver(() => {
+  isLightMode.value = document.body.classList.contains('light-mode')
+})
+
+const initWaveSurfer = () => {
+  if (!videoSrc.value || !waveformContainer.value) return
+  if (wavesurferInstance.value) {
+    wavesurferInstance.value.destroy()
+    wavesurferInstance.value = null
+  }
+  wavesurferInstance.value = WaveSurfer.create({
+    container: waveformContainer.value,
+    waveColor: '#86868b',
+    progressColor: '#86868b',
+    barWidth: 3,
+    barGap: 2,
+    barRadius: 2,
+    height: props.waveformHeight,
+    width: waveformWidth.value,
+    backend: 'MediaElement',
+    media: props.videoRef?.value || props.videoRef,
+    interact: false,
+    normalize: true,
+  })
+}
+
+onMounted(() => {
+  themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+})
+
+onUnmounted(() => {
+  themeObserver.disconnect()
+})
+
+const waveformColor = ref('#fefefe')
+const playheadColor = computed(() => isLightMode.value ? '#cc0000' : '#ff4500')
+const playheadShadow = computed(() => isLightMode.value ? '0 0 6px rgba(180,0,0,0.8)' : '0 0 5px rgba(255,69,0,0.5)')
+
+const TRACK_HEIGHT = 50 
+
+const leftGridRows = computed(() => {
+  const wh = props.waveformHeight
+  if (hasOriginal.value && hasTranslation.value) return `${wh}px ${TRACK_HEIGHT}px ${TRACK_HEIGHT}px`
+  if (hasOriginal.value || hasTranslation.value) return `${wh}px ${TRACK_HEIGHT}px`
+  return `${wh}px`
+})
+
+const formatPlayheadTime = (seconds) => {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  const ms = Math.floor((seconds % 1) * 1000)
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`
+}
+
+const activeDragSub = computed(() => {
+  if (draggingSubtitle.value) {
+    const list = subtitleType.value === 'tran' ? processedTranSubtitles.value : processedSubtitles.value
+    return list.find(s => s.id === draggingSubtitle.value.id) ?? null
+  }
+  if (resizingSubtitle.value) {
+    const list = subtitleType.value === 'tran' ? processedTranSubtitles.value : processedSubtitles.value
+    return list.find(s => s.id === resizingSubtitle.value.id) ?? null
+  }
+  return null
+})
+
+const activeSidebarTrack = ref(
+  props.activeTrack ?? (!props.subtitles?.length && props.tranSubtitles?.length ? 'tran' : 'orig')
+)
+
+// Sync from parent (sidebar tab clicks)
+watch(() => props.activeTrack, (val) => {
+  if (val && val !== activeSidebarTrack.value) {
+    activeSidebarTrack.value = val
+  }
+})
+
+// Auto-switch if the active track becomes empty
+watch([hasOriginal, hasTranslation], () => {
+  if (activeSidebarTrack.value === 'orig' && !hasOriginal.value && hasTranslation.value) {
+    activeSidebarTrack.value = 'tran'
+    emit('update:activeTrack', 'tran')
+  } else if (activeSidebarTrack.value === 'tran' && !hasTranslation.value && hasOriginal.value) {
+    activeSidebarTrack.value = 'orig'
+    emit('update:activeTrack', 'orig')
+  }
+}, { immediate: true })
 
 const MIN_SUBTITLE_DURATION = 0.5
 
@@ -49,12 +174,18 @@ const getVideoSrc = () => {
   return videoElement.src || videoElement.currentSrc || ''
 }
 
-watch(() => props.videoRef, () => {
-  videoSrc.value = getVideoSrc()
-}, { immediate: true, deep: true })
+watch(videoSrc, (val) => {
+  if (val) {
+    nextTick(() => initWaveSurfer())
+  }
+})
 
 watch(() => props.pixelsPerSecond, () => {
-  waveformKey.value++
+  if (wavesurferInstance.value) {
+    wavesurferInstance.value.destroy()
+    wavesurferInstance.value = null
+  }
+  initWaveSurfer()
 })
 
 const parseSrtTimestamp = (timestampStr) => {
@@ -131,7 +262,7 @@ const processedTranSubtitles = computed(() => {
 
 const isSubtitleActive = (sub) => {
   const time = currentTime.value
-  return time >= sub.start && time <= (sub.start + sub.duration)
+  return time >= sub.start && time < (sub.start + sub.duration)
 }
 
 const handleSubtitleClick = (sub, type) => {
@@ -139,12 +270,14 @@ const handleSubtitleClick = (sub, type) => {
   if (props.videoRef) {
     const videoElement = props.videoRef.value || props.videoRef
     videoElement.currentTime = sub.start
-    videoElement.pause()
+    stopAtTime.value = sub.start + (sub.duration -0.001)                        
     if (onSubtitleSelect) {
       onSubtitleSelect(sub.id)
     }
   }
 }
+
+let rafId = null
 
 const updateProgress = () => {
   if (!props.videoRef) return
@@ -153,22 +286,40 @@ const updateProgress = () => {
   isPlaying.value = !videoElement.paused
 }
 
+const startRaf = () => {
+  const loop = () => {
+    updateProgress()
+    rafId = requestAnimationFrame(loop)
+  }
+  rafId = requestAnimationFrame(loop)
+}
+
+const stopRaf = () => {
+  if (rafId) {
+    cancelAnimationFrame(rafId)
+    rafId = null
+  }
+}
+
+let scrollCooldown = false
+
 watch(currentTime, (newVal) => {
-  if (!timelineWrapper.value) return
+  if (!timelineWrapper.value || !isPlaying.value) return
   const container = timelineWrapper.value
+  const containerWidth = container.clientWidth
   const playheadPosition = newVal * props.pixelsPerSecond
 
-  const PAGE_WIDTH = 1150   
-  const SCROLL_STEP = 1140  
+  const visibleStart = container.scrollLeft
+  const visibleEnd = visibleStart + containerWidth
+  const margin = containerWidth * 0.15
 
-  const pageIndex = Math.floor(playheadPosition / PAGE_WIDTH)
-  const targetScroll = pageIndex * SCROLL_STEP
-
-  if (container.scrollLeft !== targetScroll) {
+  if (playheadPosition > visibleEnd - margin && !scrollCooldown) {
+    scrollCooldown = true
     container.scrollTo({
-      left: targetScroll,
+      left: playheadPosition - margin,
       behavior: 'smooth'
     })
+    setTimeout(() => { scrollCooldown = false }, 1000)
   }
 })
 
@@ -203,6 +354,18 @@ const formatTime = (seconds) => {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+const debounce = (fn, delay) => {
+  let timer = null
+  return (...args) => {
+    clearTimeout(timer)
+    timer = setTimeout(() => fn(...args), delay)
+  }
+}
+
+watch(() => props.waveformHeight, debounce(() => {
+  initWaveSurfer()
+}, 600))
+
 const handleSubtitleMouseDown = (event, sub, edge = null, type = null) => {
   event.preventDefault()
   event.stopPropagation()
@@ -226,20 +389,39 @@ const handleSubtitleMouseDown = (event, sub, edge = null, type = null) => {
 const handlePlayheadMouseDown = (event) => {
   event.preventDefault()
   isDragging.value = true
+  playheadDragStartX.value = event.clientX
+  isPlayheadActuallyDragging.value = false
   document.body.style.cursor = 'grabbing'
   document.body.style.userSelect = 'none'
+  stopAtTime.value = null
 }
 
 const handleMouseMove = (event) => {
   if (isDragging.value && !draggingSubtitle.value && !resizingSubtitle.value) {
-    if (!props.videoRef || !timelineWrapper.value) return
-    const videoElement = props.videoRef.value || props.videoRef
-    const rect = timelineWrapper.value.getBoundingClientRect()
-    const clickX = event.clientX - rect.left + timelineWrapper.value.scrollLeft
-    const newTime = Math.max(0, Math.min(clickX / props.pixelsPerSecond, props.duration))
-    videoElement.currentTime = newTime
-    return
+  if (!props.videoRef || !timelineWrapper.value) return
+  const videoElement = props.videoRef.value || props.videoRef
+  const rect = timelineWrapper.value.getBoundingClientRect()
+  const clickX = event.clientX - rect.left + timelineWrapper.value.scrollLeft
+  const newTime = Math.max(0, Math.min(clickX / props.pixelsPerSecond, props.duration))
+  videoElement.currentTime = newTime
+
+  const container = timelineWrapper.value
+  const containerWidth = container.clientWidth
+  const playheadPosition = newTime * props.pixelsPerSecond
+  const visibleStart = container.scrollLeft
+  const visibleEnd = visibleStart + containerWidth
+
+  if ((playheadPosition < visibleStart || playheadPosition > visibleEnd) && !scrollCooldown) {
+    scrollCooldown = true
+    container.scrollTo({
+      left: Math.max(0, playheadPosition - containerWidth * 0.5),
+      behavior: 'smooth'
+    })
+    setTimeout(() => { scrollCooldown = false }, 1000) 
   }
+  stopAtTime.value = null
+  return
+}
 
   const isTran = subtitleType.value === 'tran'
   const currentData = isTran ? processedTranSubtitles.value : processedSubtitles.value
@@ -329,6 +511,7 @@ const handleMouseMove = (event) => {
 const handleMouseUp = () => {
   if (isDragging.value || draggingSubtitle.value || resizingSubtitle.value) {
     isDragging.value = false
+    isPlayheadActuallyDragging.value = false
     draggingSubtitle.value = null
     resizingSubtitle.value = null
     resizeEdge.value = null
@@ -346,9 +529,37 @@ const waveformWidth = computed(() => {
 onMounted(() => {
   if (props.videoRef) {
     const videoElement = props.videoRef.value || props.videoRef
-    videoElement.addEventListener('timeupdate', updateProgress)
-    videoElement.addEventListener('play', updateProgress)
-    videoElement.addEventListener('pause', updateProgress)
+
+    const loop = () => {
+      if (props.videoRef) {
+        const el = props.videoRef.value || props.videoRef
+        currentTime.value = el.currentTime
+        isPlaying.value = !el.paused
+
+        if (stopAtTime.value !== null && el.currentTime >= stopAtTime.value) {
+          el.pause()
+          el.currentTime = stopAtTime.value   
+          stopAtTime.value = null             
+        }
+      }
+      rafId = requestAnimationFrame(loop)
+    }
+    rafId = requestAnimationFrame(loop)
+
+    videoElement.addEventListener('seeked', () => {
+      if (isDragging.value) return
+
+      if (timelineWrapper.value) {
+        const container = timelineWrapper.value
+        const containerWidth = container.clientWidth
+        const playheadPosition = videoElement.currentTime * props.pixelsPerSecond
+        container.scrollTo({
+          left: Math.max(0, playheadPosition - containerWidth * 0.3),
+          behavior: 'instant'
+        })
+      }
+    })
+
     videoElement.addEventListener('loadedmetadata', () => {
       videoSrc.value = getVideoSrc()
     })
@@ -359,12 +570,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (props.videoRef) {
-    const videoElement = props.videoRef.value || props.videoRef
-    videoElement.removeEventListener('timeupdate', updateProgress)
-    videoElement.removeEventListener('play', updateProgress)
-    videoElement.removeEventListener('pause', updateProgress)
-  }
+  stopRaf()
+  if (wavesurferInstance.value) wavesurferInstance.value.destroy()
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseup', handleMouseUp)
 })
@@ -372,10 +579,32 @@ onUnmounted(() => {
 
 <template>
   <div class="container">
-    <div class="left">
+    <div class="left" :style="{ gridTemplateRows: leftGridRows }">
       <div class="waveform-label">Waveform</div>
 
-      <div class="track-label">
+      <!-- Original track label — only if subtitles exist -->
+      <div v-if="hasOriginal" class="track-label">
+        <span>Original</span>
+        <button
+          class="eye-btn"
+          :class="{ 'eye-btn-active': activeSidebarTrack === 'orig' }"
+          :title="activeSidebarTrack === 'orig' ? 'Showing Track 2 in sidebar' : 'Show Track 2 in sidebar'"
+          @click="toggleSidebarTrack('orig')"
+        >
+          <svg v-if="activeSidebarTrack === 'orig'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/>
+            <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/>
+          </svg>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/>
+            <path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829"/>
+            <path d="M3.35 5.47q-.27.238-.518.487A13 13 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7 7 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709zm10.296 8.884-12-12 .708-.708 12 12z"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Translated track label — only if tranSubtitles exist -->
+      <div v-if="hasTranslation" class="track-label">
         <span>Translated</span>
         <button
           class="eye-btn"
@@ -394,29 +623,6 @@ onUnmounted(() => {
           </svg>
         </button>
       </div>
-
-    
-      <div class="track-label">
-        <span>Original</span>
-        <button
-          class="eye-btn"
-          :class="{ 'eye-btn-active': activeSidebarTrack === 'orig' }"
-          :title="activeSidebarTrack === 'orig' ? 'Showing Track 2 in sidebar' : 'Show Track 2 in sidebar'"
-          @click="toggleSidebarTrack('orig')"
-        >
-    
-          <svg v-if="activeSidebarTrack === 'orig'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-            <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/>
-            <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/>
-          </svg>
-      
-          <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-            <path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/>
-            <path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829"/>
-            <path d="M3.35 5.47q-.27.238-.518.487A13 13 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7 7 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709zm10.296 8.884-12-12 .708-.708 12 12z"/>
-          </svg>
-        </button>
-      </div>
     </div>
 
     <div class="timeline-wrapper" ref="timelineWrapper">
@@ -424,6 +630,13 @@ onUnmounted(() => {
         class="ruler" 
         :style="{ width: (duration * pixelsPerSecond) + 'px' }"
       >
+        <div
+          v-if="isDragging"
+          class="playhead-tooltip"
+          :style="{ left: (currentTime * pixelsPerSecond) + 'px' }"
+        >
+          {{ formatPlayheadTime(currentTime) }}
+        </div>
         <div 
           v-for="time in timeMarkers" 
           :key="time" 
@@ -435,100 +648,108 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div class="track-area" :style="{ width: (duration * pixelsPerSecond) + 'px' }">
+      <div class="track-area" :style="{ width: (duration * pixelsPerSecond) + 'px', height: trackAreaHeight }">
+        <div
+          v-if="activeDragSub"
+          class="subtitle-drag-tooltip"
+          :style="{
+            left: ((activeDragSub.start + activeDragSub.duration / 2) * pixelsPerSecond) + 'px',
+            top: subtitleType === 'tran' ? tranTop : origTop
+          }"
+        >
+          {{ formatPlayheadTime(activeDragSub.start) }} &#8594; {{ formatPlayheadTime(activeDragSub.start + activeDragSub.duration) }}
+        </div>
         <div 
           class="playhead" 
           :style="{ transform: `translateX(${currentTime * pixelsPerSecond}px)` }"
           @mousedown="handlePlayheadMouseDown"
         >
-          <div class="playhead-line"></div>
+          <div class="playhead-line" :style="{ 
+            height: `calc(${trackAreaHeight} + 30px)`,
+            background: playheadColor,
+            boxShadow: playheadShadow
+          }"></div>
         </div>
 
-        <div 
-          ref="waveformContainer" 
+        <div
+          ref="waveformContainer"
           class="waveform-track"
-          :style="{ width: waveformWidth + 'px' }"
+          :style="{ width: waveformWidth + 'px', height: waveformHeight + 'px' }"
         >
-          <AVWaveform
-            v-if="videoSrc"
-            :key="`${videoSrc}-${waveformKey}`" 
-            :src="videoSrc"
-            :canv-width="waveformWidth"
-            :playtime="false"
-            :playtime-line-width="0"
-            :canv-height="60"
-            :line-width="3"
-            :line-space="2"
-            :line-color="'#60a5fa'"
-            :audio-controls="false"
-            :noplayed-line-width="0"
-          />
-          <div v-else class="waveform-placeholder">
+          <div v-if="!videoSrc" class="waveform-placeholder">
             Caricamento video...
           </div>
         </div>
 
- 
-        <div 
-          v-for="sub in processedTranSubtitles" 
-          :key="'tran-' + sub.id"
-          class="sub-block sub-block-tran"
-          :class="{ 
-            'sub-block-active': isSubtitleActive(sub),
-            'sub-block-dragging': draggingSubtitle?.id === sub.id || resizingSubtitle?.id === sub.id,
-            'sub-block-sidebar-active': activeSidebarTrack === 'tran'
-          }"
-          :style="{ 
-            position: 'absolute',
-            left: '0px',
-            top: '70px',
-            width: (sub.duration * pixelsPerSecond) + 'px',
-            transform: `translateX(${sub.start * pixelsPerSecond}px)` 
-          }"
-          :title="sub.originalTimestamp"
-          @click="handleSubtitleClick(sub, 'tran')"
-          @mousedown="(e) => handleSubtitleMouseDown(e, sub, null, 'tran')"
-        >
+        <!-- Original track — only if subtitles exist -->
+        <template v-if="hasOriginal">
           <div 
-            class="resize-handle resize-handle-left"
-            @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'left', 'tran')"
-          ></div>
-          <span class="sub-block-text">{{ sub.text }}</span>
+            v-for="sub in processedSubtitles" 
+            :key="'orig-' + sub.id"
+            class="sub-block sub-block-orig"
+            :class="{ 
+              'sub-block-dragging': draggingSubtitle?.id === sub.id || resizingSubtitle?.id === sub.id,
+              'sub-block-sidebar-active': activeSidebarTrack === 'orig',
+              'sub-block-active': isSubtitleActive(sub),
+              'sub-block-orig-light': isLightMode
+            }"
+            :style="{ 
+              position: 'absolute',
+              left: '0px',
+              top: origTop,
+              width: (sub.duration * pixelsPerSecond) + 'px',
+              transform: `translateX(${sub.start * pixelsPerSecond}px)` 
+            }"
+            :title="sub.originalTimestamp"
+            @click="handleSubtitleClick(sub, 'orig')"
+            @mousedown="(e) => handleSubtitleMouseDown(e, sub, null, 'orig')"
+          >
+            <div 
+              class="resize-handle resize-handle-left"
+              @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'left', 'orig')"
+            ></div>
+            <span class="sub-block-text">{{ sub.text }}</span>
+            <div 
+              class="resize-handle resize-handle-right"
+              @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'right', 'orig')"
+            ></div>
+          </div>
+        </template>
+        
+        <!-- Translated track — only if tranSubtitles exist -->
+        <template v-if="hasTranslation">
           <div 
-            class="resize-handle resize-handle-right"
-            @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'right', 'tran')"
-          ></div>
-        </div>
-
-        <div 
-          v-for="sub in processedSubtitles" 
-          :key="'orig-' + sub.id"
-          class="sub-block sub-block-orig"
-          :class="{ 
-            'sub-block-dragging': draggingSubtitle?.id === sub.id || resizingSubtitle?.id === sub.id,
-            'sub-block-sidebar-active': activeSidebarTrack === 'orig'
-          }"
-          :style="{ 
-            position: 'absolute',
-            left: '0px',
-            top: '130px',
-            width: (sub.duration * pixelsPerSecond) + 'px',
-            transform: `translateX(${sub.start * pixelsPerSecond}px)` 
-          }"
-          :title="sub.originalTimestamp"
-          @click="handleSubtitleClick(sub, 'orig')"
-          @mousedown="(e) => handleSubtitleMouseDown(e, sub, null, 'orig')"
-        >
-          <div 
-            class="resize-handle resize-handle-left"
-            @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'left', 'orig')"
-          ></div>
-          <span class="sub-block-text">{{ sub.text }}</span>
-          <div 
-            class="resize-handle resize-handle-right"
-            @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'right', 'orig')"
-          ></div>
-        </div>
+            v-for="sub in processedTranSubtitles" 
+            :key="'tran-' + sub.id"
+            class="sub-block sub-block-tran"
+            :class="{ 
+              'sub-block-active': isSubtitleActive(sub),
+              'sub-block-dragging': draggingSubtitle?.id === sub.id || resizingSubtitle?.id === sub.id,
+              'sub-block-sidebar-active': activeSidebarTrack === 'tran',
+              'sub-block-tran-light': isLightMode
+            }"
+            :style="{ 
+              position: 'absolute',
+              left: '0px',
+              top: tranTop,
+              width: (sub.duration * pixelsPerSecond) + 'px',
+              transform: `translateX(${sub.start * pixelsPerSecond}px)` 
+            }"
+            :title="sub.originalTimestamp"
+            @click="handleSubtitleClick(sub, 'tran')"
+            @mousedown="(e) => handleSubtitleMouseDown(e, sub, null, 'tran')"
+          >
+            <div 
+              class="resize-handle resize-handle-left"
+              @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'left', 'tran')"
+            ></div>
+            <span class="sub-block-text">{{ sub.text }}</span>
+            <div 
+              class="resize-handle resize-handle-right"
+              @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'right', 'tran')"
+            ></div>
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -543,15 +764,14 @@ onUnmounted(() => {
 }
 
 .left {
-  padding-top: 30px;
+  padding-top: 30px;  
   display: grid;
-  grid-template-rows: 60px 60px 60px;
   align-items: center;
 }
 
 .waveform-label {
-  font-size: 11px;
-  color: #888;
+  font-size: 14px;
+  color: #b0afaf;
   padding-left: 6px;
 }
 
@@ -560,8 +780,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 0 6px;
-  font-size: 11px;
-  color: #888;
+  font-size: 14px;
+  color: #b0afaf;
 }
 
 .track-label span {
@@ -599,7 +819,7 @@ onUnmounted(() => {
 .timeline-wrapper {
   width: 100%;
   overflow-x: auto;
-  background: #111;
+  background-color: #1c2331;
   border-top: 1px solid #333;
   position: relative;
   scrollbar-width: thin;
@@ -610,7 +830,7 @@ onUnmounted(() => {
 .ruler {
   height: 30px;
   position: relative;
-  background: #1a1a1a;
+  background-color: #1c2331;
   border-bottom: 1px solid #333;
 }
 
@@ -638,21 +858,17 @@ onUnmounted(() => {
 }
 
 .track-area {
-  height: 200px;
   position: relative;
-  background: #141414;
+  background-color: #1c2331;
   background-image: linear-gradient(to right, #222 1px, transparent 1px);
   background-size: v-bind('pixelsPerSecond + "px"') 100%;
-  display: grid;
-  grid-template-rows: 60px 60px 60px;
 }
 
 .waveform-track {
   position: absolute;
   top: 0;
   left: 0;
-  height: 60px;
-  background: #1a1a1a;
+  background-color: #1c2331;
   border-bottom: 1px solid #333;
   pointer-events: none;
   user-select: none;
@@ -671,7 +887,7 @@ onUnmounted(() => {
 .waveform-track :deep(canvas) {
   display: block !important;
   width: 100% !important;
-  height: 60px !important;
+  height: v-bind('waveformHeight + "px"') !important;
   background: transparent !important;
 }
 
@@ -694,9 +910,9 @@ onUnmounted(() => {
 
 .playhead-line {
   width: 2px;
-  height: 230px;
   background: #ff4500;
   box-shadow: 0 0 5px rgba(255, 69, 0, 0.5);
+  /* height set dynamically via :style */
 }
 
 .sub-block {
@@ -716,23 +932,56 @@ onUnmounted(() => {
   user-select: none;
 }
 
+.playhead-tooltip {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  background: #1e1e1e;
+  border: 1px solid #555;
+  color: #e0e0e0;
+  font-size: 11px;
+  font-family: monospace;
+  padding: 3px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  z-index: 200;
+}
+
+.subtitle-drag-tooltip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  margin-top: -4px;
+  background: #1e1e1e;
+  border: 1px solid #555;
+  color: #e0e0e0;
+  font-size: 11px;
+  font-family: monospace;
+  padding: 3px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+}
+
 .sub-block-tran {
-  background: rgba(0, 120, 215, 0.5);
-  border: 1px solid #0078d7;
+  background: rgba(59, 131, 246, 0.5);
+  border: 1px solid #3b82f6;
 }
 
 .sub-block-tran:hover {
-  background: rgba(0, 120, 215, 0.8);
+  background: rgba(59, 131, 246, 0.83)
 }
 
-
 .sub-block-orig {
-  background: rgba(0, 170, 140, 0.45);
-  border: 1px solid #00aa8c;
+  background: rgba(142, 73, 160, 0.45);
+  border: 1px solid #8e49a0;
 }
 
 .sub-block-orig:hover {
-  background: rgba(0, 170, 140, 0.75);
+  background: rgba(142, 73, 160, 0.75);
 }
 
 .sub-block-sidebar-active {
@@ -759,7 +1008,13 @@ onUnmounted(() => {
   overflow: hidden;
   flex: 1;
   pointer-events: none;
+  font-size: 12px;
 }
+
+.waveform-track :deep(wave) {
+  overflow: hidden !important;
+}
+
 
 .resize-handle {
   position: absolute;

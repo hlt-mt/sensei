@@ -10,6 +10,8 @@ import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import axios from 'axios';
 
+const SERVICE_BASE = import.meta.env.VITE_SERVICE_BASE || 'https://api.matita.net/subtitles-admin'
+
 const router = useRouter();
 
 onMounted(async () => {
@@ -23,7 +25,7 @@ onMounted(async () => {
 
   try {
     // Chiamata GET all'endpoint richiesto
-    const response = await axios.get('https://api.matita.net/subtitles-admin/me', {
+    const response = await axios.get(`${SERVICE_BASE}/me`, {
       headers: {
         Authorization: `Bearer ${token}`
       }

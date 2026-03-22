@@ -6,7 +6,7 @@ import Form from '../components/Form.vue';
 
 const router = useRouter();
 
-const API_BASE = 'https://api.matita.net/subtitles-admin';
+const API_BASE = import.meta.env.VITE_SERVICE_BASE || 'https://api.matita.net/subtitles-admin'
 
 // ─── Token helpers ────────────────────────────────────────────────────────────
 
@@ -52,6 +52,44 @@ api.interceptors.response.use(
 
 const profile = ref(null);
 const projects = ref([]);
+const sortedProjects = computed(() => {
+  return [...projects.value].sort((a, b) => {
+    let aDate = null;
+    let bDate = null;
+
+    try {
+      let aData = a.data;
+      while (typeof aData === 'string') aData = JSON.parse(aData);
+      aDate = aData?.last_saved ? new Date(aData.last_saved) : null;
+    } catch {}
+
+    try {
+      let bData = b.data;
+      while (typeof bData === 'string') bData = JSON.parse(bData);
+      bDate = bData?.last_saved ? new Date(bData.last_saved) : null;
+    } catch {}
+
+    // Progetti senza last_saved vanno in fondo
+    if (!aDate && !bDate) return 0;
+    if (!aDate) return 1;
+    if (!bDate) return -1;
+
+    return bDate - aDate;
+  });
+});
+
+const groupByUser = ref(false);
+
+const projectsGroupedByUser = computed(() => {
+  const groups = {};
+  for (const p of sortedProjects.value) {
+    const uid = p.user_id ?? 'unknown';
+    if (!groups[uid]) groups[uid] = [];
+    groups[uid].push(p);
+  }
+  return Object.entries(groups).sort((a, b) => Number(a[0]) - Number(b[0]));
+});
+
 const users = ref([]);
 const activeTab = ref('projects');
 const loading = ref(false);
@@ -83,6 +121,8 @@ const userForm = ref({ username: '', email: '', password: '', confirmPassword: '
 const userFormError = ref('');
 const userFormLoading = ref(false);
 const deleteConfirmUserId = ref(null);
+
+const getUserById = (id) => users.value.find(u => u.id === Number(id));
 
 // ─── Data Loading ──────────────────────────────────────────────────────────────
 
@@ -219,7 +259,7 @@ const parseSrtToArray = (srtString) => {
     if (righe.length >= 3) {
       return {
         timestamp: righe[1],
-        testo: righe.slice(2).join(' ')
+        testo: righe.slice(2).join('\n')
       };
     }
     return null;
@@ -296,6 +336,27 @@ const updateUser = async () => {
     userFormError.value = err.response?.data?.detail?.[0]?.msg || 'Error updating user';
   } finally {
     userFormLoading.value = false;
+  }
+};
+
+const getParsedData = (project) => {
+  try {
+    let data = project.data;
+    while (typeof data === 'string') data = JSON.parse(data);
+    return data || {};
+  } catch {
+    return {};
+  }
+};
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return '';
+  try {
+    return new Date(dateStr).toLocaleDateString(undefined, {
+      day: '2-digit', month: 'short', year: 'numeric'
+    });
+  } catch {
+    return dateStr;
   }
 };
 
@@ -389,12 +450,25 @@ onMounted(loadDashboard);
               <h2 class="section-title">Your Projects</h2>
               <p class="section-sub">{{ projects.length }} project{{ projects.length === 1 ? '' : 's' }} found</p>
             </div>
-            <button @click="showProjectForm = true" class="btn-primary">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
-              </svg>
-              New Project
-            </button>
+            <div style="display:flex;gap:10px;align-items:center;">
+              <button
+                v-if="profile?.admin"
+                @click="groupByUser = !groupByUser"
+                :class="['btn-secondary', { 'btn-group-active': groupByUser }]"
+                style="display:flex;align-items:center;gap:7px;"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M1 2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V2zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V2zM1 7a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V7zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7zm5 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V7z"/>
+                </svg>
+                {{ groupByUser ? 'Default view' : 'Group by user' }}
+              </button>
+              <button @click="showProjectForm = true" class="btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                </svg>
+                New Project
+              </button>
+            </div>
           </div>
 
           <!-- Modal Form New Project -->
@@ -413,8 +487,8 @@ onMounted(loadDashboard);
           </div>
 
           <!-- Projects Grid -->
-          <div v-else-if="projects.length > 0" class="projects-grid">
-            <div v-for="p in projects" :key="p.id" class="project-card">
+          <div v-else-if="projects.length > 0 && !groupByUser" class="projects-grid">
+            <div v-for="p in sortedProjects" :key="p.id" class="project-card">
               <div class="project-thumbnail" @click="openProjectDetail(p)" title="View details">
                 <div class="thumb-icon">
                   <svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" fill="currentColor" viewBox="0 0 16 16">
@@ -433,7 +507,90 @@ onMounted(loadDashboard);
               <div class="project-info">
                 <h3 class="project-name">{{ p.name }}</h3>
                 <p class="project-id">#{{ p.id }}</p>
-                <p v-if="p.data" class="project-data">{{ p.data }}</p>
+                <div v-if="p.data" class="project-meta">
+                  <div class="project-langs">
+                    <span class="lang-tag">{{ getParsedData(p).sourceLanguage || '—' }}</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16" class="lang-arrow">
+                      <path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/>
+                    </svg>
+                    <span class="lang-tag">{{ getParsedData(p).targetLanguage || '—' }}</span>
+                  </div>
+                  <div class="project-dates">
+                    <span v-if="getParsedData(p).created_at" class="date-item">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM2 2a1 1 0 0 0-1 1v1h14V3a1 1 0 0 0-1-1H2zm13 3H1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5z"/>
+                      </svg>
+                      {{ formatDate(getParsedData(p).created_at) }}
+                    </span>
+                    <span v-if="getParsedData(p).last_saved" class="date-item date-saved">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"/>
+                        <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"/>
+                      </svg>
+                      {{ formatDate(getParsedData(p).last_saved) }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Projects Grid — grouped by user -->
+          <div v-else-if="projects.length > 0 && groupByUser" class="grouped-view">
+            <div v-for="[uid, userProjects] in projectsGroupedByUser" :key="uid" class="user-group">
+                <div class="user-group-header">
+                  <span class="avatar-mini">
+                    {{ getUserById(uid)?.username?.charAt(0).toUpperCase() ?? '?' }}
+                  </span>
+                  <span class="user-group-label">{{ getUserById(uid)?.username ?? `User #${uid}` }}</span>
+                  <span class="user-group-count">{{ userProjects.length }} project{{ userProjects.length === 1 ? '' : 's' }}</span>
+                </div>
+                <div class="projects-grid">
+                  <div v-for="p in userProjects" :key="p.id" class="project-card">
+                    <div class="project-thumbnail" @click="openProjectDetail(p)" title="View details">
+                  <div class="thumb-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" fill="currentColor" viewBox="0 0 16 16">
+                      <path d="M6.79 5.093A.5.5 0 0 0 6 5.5v5a.5.5 0 0 0 .79.407l3.5-2.5a.5.5 0 0 0 0-.814l-3.5-2.5z"/>
+                      <path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V4zm15 0a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4z"/>
+                    </svg>
+                  </div>
+                  <div class="thumb-hover-overlay">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16">
+                      <path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/>
+                      <path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>
+                    </svg>
+                    <span>View Details</span>
+                  </div>
+                </div>
+                <div class="project-info">
+                  <h3 class="project-name">{{ p.name }}</h3>
+                  <p class="project-id">#{{ p.id }}</p>
+                  <div v-if="p.data" class="project-meta">
+                    <div class="project-langs">
+                      <span class="lang-tag">{{ getParsedData(p).sourceLanguage || '—' }}</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16" class="lang-arrow">
+                        <path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/>
+                      </svg>
+                      <span class="lang-tag">{{ getParsedData(p).targetLanguage || '—' }}</span>
+                    </div>
+                    <div class="project-dates">
+                      <span v-if="getParsedData(p).created_at" class="date-item">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="currentColor" viewBox="0 0 16 16">
+                          <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM2 2a1 1 0 0 0-1 1v1h14V3a1 1 0 0 0-1-1H2zm13 3H1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5z"/>
+                        </svg>
+                        {{ formatDate(getParsedData(p).created_at) }}
+                      </span>
+                      <span v-if="getParsedData(p).last_saved" class="date-item date-saved">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="currentColor" viewBox="0 0 16 16">
+                          <path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"/>
+                          <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"/>
+                        </svg>
+                        {{ formatDate(getParsedData(p).last_saved) }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                </div>
               </div>
             </div>
           </div>
@@ -942,6 +1099,42 @@ onMounted(loadDashboard);
   cursor: not-allowed;
 }
 
+.btn-group-active {
+  border-color: #3b82f6;
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.grouped-view {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+
+.user-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #1e2330;
+}
+
+.user-group-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.user-group-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: #475569;
+  background: #1e2330;
+  padding: 2px 9px;
+  border-radius: 10px;
+}
+
 /* ── Project Card ──────────────────────────────────────────────────────────── */
 .project-thumbnail {
   width: 100%;
@@ -984,6 +1177,53 @@ onMounted(loadDashboard);
 
 .project-thumbnail:hover .thumb-icon {
   opacity: 0;
+}
+.project-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.project-langs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lang-tag {
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.lang-arrow {
+  color: #475569;
+  flex-shrink: 0;
+}
+
+.project-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.date-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #475569;
+}
+
+.date-saved {
+  color: #4ade80;
+  opacity: 0.75;
 }
 
 /* ── Project Modal ─────────────────────────────────────────────────────────── */
