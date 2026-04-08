@@ -17,7 +17,18 @@ const handleLogin = async () => {
   loading.value = true;
   errorMsg.value = '';
 
+
   try {
+
+    
+    if (!username.value) {
+      errorMsg.value = "Please enter your username.";
+      return;
+    }
+    if (!password.value) {
+      errorMsg.value = "Please enter your password.";
+      return;
+    }
     const params = new URLSearchParams();
     params.append('username', username.value);
     params.append('password', password.value);
@@ -43,10 +54,10 @@ const handleLogin = async () => {
   } catch (err) {
     if (err.response) {
       errorMsg.value = err.response.status === 401
-        ? "Credenziali errate. Riprova."
-        : "Errore del server: " + (err.response.data.detail || "Riprova");
+        ? "Invalid credentials. Please try again."
+        : "Server error: " + (err.response.data.detail || "Please try again");
     } else {
-      errorMsg.value = "Impossibile connettersi al server.";
+      errorMsg.value = "Unable to connect to the server.";
     }
   } finally {
     loading.value = false;
@@ -57,23 +68,24 @@ const handleLogin = async () => {
 <template>
   <div class="sensei-wrapper">
     <header class="position-absolute top-0 start-0 end-0 p-3 d-flex justify-content-between align-items-center">
-      <h1 class="mb-0">Sensei</h1>
+      <div class="logo">
+        <img src="/FBK_colour_transp.png" alt="FBK Logo" class="logo_photo">
+        Sensei</div>
     </header>
 
     <main class="auth-container">
       <div class="auth-card">
         <div class="auth-header">
-          <h1>Bentornato!</h1>
-          <p class="subtitle">Accedi alla community di Sensei Subtitles</p>
+          <h1>Welcome!</h1>
         </div>
 
-        <form @submit.prevent="handleLogin" class="auth-form">
+        <form @submit.prevent="handleLogin" class="auth-form" novalidate>
           <div class="input-group">
             <label>Username</label>
             <input 
               v-model="username" 
               type="text" 
-              placeholder="Il tuo username" 
+              placeholder="Your username" 
               required 
             />
           </div>
@@ -89,7 +101,7 @@ const handleLogin = async () => {
           </div>
 
           <button type="submit" :disabled="loading" class="btn-submit">
-            {{ loading ? 'Accesso in corso...' : 'Log in' }}
+            {{ loading ? 'Logging in...' : 'Log in' }}
           </button>
 
           <Transition name="fade">
@@ -129,6 +141,11 @@ const handleLogin = async () => {
   font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.5px;
+}
+
+.logo_photo{
+  height: 40px;
+  width: 40px;
 }
 
 .glass-btn:hover {

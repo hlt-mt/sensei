@@ -116,6 +116,11 @@ const sidebarSubtitles = computed(() =>
 )
 
 const undoStack = ref([])
+const showGuidelines = ref(false)
+const maxLines = ref(2)
+const maxCharsPerLine = ref(42)
+const maxCPS = ref(22)
+
 const MAX_UNDO = 50
 
 const saveUndoSnapshot = () => {
@@ -166,6 +171,36 @@ const parseSrtTimestampEnd = (timestampStr) => {
   const parts = endTime.split(':').map(Number)
   if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + (parts[2] - 0.001)
   return 0
+}
+
+const getCharsPerSecond = (subtitle) => {
+  const start = parseSrtTimestamp(subtitle.timestamp)
+  const end = parseSrtTimestampEnd(subtitle.timestamp)
+  const duration = end - start
+  if (duration <= 0) return 0
+  const chars = (subtitle.testo || '').replace(/\s/g, '').length
+  return chars / duration
+}
+
+const getSubtitleWarnings = (subtitle) => {
+  const warnings = []
+  const lines = (subtitle.testo || '').split('\n')
+  
+  if (lines.length > maxLines.value) {
+    warnings.push(`Too many lines: ${lines.length} found (max ${maxLines.value})`)
+  }
+  
+  lines.forEach((line, i) => {
+    if (line.length > maxCharsPerLine.value) {
+      warnings.push(`Line ${i + 1} too long: ${line.length} chars (max ${maxCharsPerLine.value})`)
+    }
+  })
+  
+  if (getCharsPerSecond(subtitle) > maxCPS.value) {
+    warnings.push(`CPS too high: ${getCharsPerSecond(subtitle).toFixed(1)} cps found (max ${maxCPS.value})`)
+  }
+  
+  return warnings
 }
 
 const formatSrtTimestamp = (seconds) => {
@@ -512,7 +547,8 @@ const openEditModal = (index) => {
   const arr = sidebarSubtitles.value
   editForm.value = { timestamp: arr[index].timestamp, testo: arr[index].testo }
   showModal.value = true
-  if (videoPlayer.value && !videoPlayer.value.paused) videoPlayer.value.pause()
+  handleSidebarClick(index)
+  if (videoPlayer.value && !videoPlayer.value.paused)  videoPlayer.value.pause()
 }
 
 const closeModal = () => {
@@ -592,7 +628,14 @@ const handleSave = async () => {
     try { let d = currentProject.value.data; while (typeof d === 'string') { d = JSON.parse(d); } currentData = d; } catch (e) { currentData = {}; }
     const res = await apiFetch(
       `${SERVICE_BASE}/projects/${currentProject.value.id}`,
-      { method: 'PATCH', body: JSON.stringify({ name: currentProject.value.name, data: JSON.stringify({ ...currentData, srt1, srt2, playhead: currentTime.value, last_saved: new Date().toISOString() }) }) }
+      { method: 'PATCH', body: JSON.stringify({ name: currentProject.value.name, data: JSON.stringify({ 
+          ...currentData, 
+          srt1, 
+          srt2, 
+          playhead: currentTime.value, 
+          last_saved: new Date().toISOString(),
+          guidelines: { maxCPS: maxCPS.value, maxCharsPerLine: maxCharsPerLine.value, maxLines: maxLines.value }
+        }) }) }
     );
     if (!res) return;
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -673,6 +716,13 @@ onMounted(() => {
     if (fullBackup) currentProject.value = JSON.parse(fullBackup)
   }
 
+  const guidelinesData = currentProject.value?.data?.guidelines
+  if (guidelinesData) {
+    if (guidelinesData.maxCPS) maxCPS.value = guidelinesData.maxCPS
+    if (guidelinesData.maxCharsPerLine) maxCharsPerLine.value = guidelinesData.maxCharsPerLine
+    if (guidelinesData.maxLines) maxLines.value = guidelinesData.maxLines
+  }
+
   const file = history.state?.videoFile || null
   if (file) {
     videoFile.value = file
@@ -734,7 +784,9 @@ watch(videoPlayer, (newPlayer) => { if (newPlayer) setupVideoSync() })
 <template>
   <div class="wrapper">
     <header class="header fixed-top p-3 d-flex justify-content-between align-items-center">
-      <div class="logo">Sensei</div>
+      <div class="logo">
+        <img src="/FBK_colour_transp.png" alt="FBK Logo" class="logo_photo">
+        Sensei</div>
 
       <div style="position: absolute; left: 50%; transform: translateX(-50%);">
         <input
@@ -758,6 +810,48 @@ watch(videoPlayer, (newPlayer) => { if (newPlayer) setupVideoSync() })
       </div>
 
       <nav class="nav">
+        <div class="guidelines-anchor" style="position: relative;">
+          <button class="btn-undo" @click="showGuidelines = !showGuidelines">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" class="bi bi-file-earmark-text" viewBox="0 0 16 16">
+              <path d="M5.5 7a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1zM5 9.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5"/>
+              <path d="M9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.5zm0 1v2A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"/>
+            </svg>
+          </button>
+
+          <Transition name="guidelines-slide">
+            <div v-if="showGuidelines" class="guidelines-panel">
+              <div class="guidelines-header">
+                <span>Guidelines</span>
+                <button class="guidelines-close" @click="showGuidelines = false">&times;</button>
+              </div>
+              <div class="guidelines-body">
+                <div class="g-section-title">Reading speed</div>
+                <div class="g-row">
+                  <label>Max. chars per second</label>
+                  <div class="g-input-wrap">
+                    <input type="number" v-model.number="maxCPS" min="1" max="50" />
+                    <span class="g-unit">CPS</span>
+                  </div>
+                </div>
+                <div class="g-row">
+                  <label>Max. chars per line</label>
+                  <div class="g-input-wrap">
+                    <input type="number" v-model.number="maxCharsPerLine" min="1" max="100" />
+                    <span class="g-unit">CPL</span>
+                  </div>
+                </div>
+                <div class="g-section-title" style="margin-top: 16px;">Styling</div>
+                <div class="g-row">
+                  <label>Max. lines</label>
+                  <div class="g-input-wrap">
+                    <input type="number" v-model.number="maxLines" min="1" max="10" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Transition>
+        </div>
+
         <button class="btn-undo" @click="undo" :disabled="isSaving">
           <svg  xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-return-left" viewBox="0 0 16 16">
               <path fill-rule="evenodd" d="M14.5 1.5a.5.5 0 0 1 .5.5v4.8a2.5 2.5 0 0 1-2.5 2.5H2.707l3.347 3.346a.5.5 0 0 1-.708.708l-4.2-4.2a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 8.3H12.5A1.5 1.5 0 0 0 14 6.8V2a.5.5 0 0 1 .5-.5"/>
@@ -852,6 +946,23 @@ watch(videoPlayer, (newPlayer) => { if (newPlayer) setupVideoSync() })
                 <span class="timestamp">{{ subtitle.timestamp }}</span>
                 <p class="testo">{{ subtitle.testo }}</p>
                 <div class="block-actions">
+                  <div v-if="getSubtitleWarnings(subtitle).length > 0" class="cps-warning-wrapper">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16" height="16"
+                      fill="#f59e0b"
+                      viewBox="0 0 16 16"
+                      class="cps-warning-icon"
+                    >
+                      <path d="M7.938 2.016A.13.13 0 0 1 8.002 2a.13.13 0 0 1 .063.016.15.15 0 0 1 .054.057l6.857 11.667c.036.06.035.124.002.183a.2.2 0 0 1-.054.06.1.1 0 0 1-.066.017H1.146a.1.1 0 0 1-.066-.017.2.2 0 0 1-.054-.06.18.18 0 0 1 .002-.183L7.884 2.073a.15.15 0 0 1 .054-.057m1.044-.45a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767z"/>
+                      <path d="M7.002 12a1 1 0 1 1 2 0 1 1 0 0 1-2 0M7.1 5.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0z"/>
+                    </svg>
+                    <div class="cps-tooltip">
+                      <div v-for="(warning, i) in getSubtitleWarnings(subtitle)" :key="i" class="cps-tooltip-line">
+                        ⚠ {{ warning }}
+                      </div>
+                    </div>
+                  </div>
                   <button class="btn-delete" @click.stop="deleteSubtitle(index)" title="Elimina sottotitolo">Delete</button>
                   <button class="btn-edit" @click.stop="openEditModal(index)">Edit</button>
                 </div>
@@ -941,7 +1052,7 @@ watch(videoPlayer, (newPlayer) => { if (newPlayer) setupVideoSync() })
       </div>
     </div>
 
-    <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
+    <div v-if="showModal" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
           <h4>Edit Subtitle</h4>
@@ -1040,6 +1151,11 @@ watch(videoPlayer, (newPlayer) => { if (newPlayer) setupVideoSync() })
   letter-spacing: 1px;
   color: #f8f9fa;
 }
+
+.logo_photo{
+  height: 40px;
+  width: 40px;
+}
 .nav { display: flex; gap: 1rem; }
 
 .btn-save {
@@ -1062,6 +1178,114 @@ watch(videoPlayer, (newPlayer) => { if (newPlayer) setupVideoSync() })
   height: 100%;
   align-items: stretch;
   max-height: 100%;
+}
+
+
+/* ─── Guidelines panel ─────────────────────────────────────────── */
+.guidelines-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+  background: #1e2128;
+  border: 1px solid #2d3748;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  z-index: 2000;
+  overflow: hidden;
+}
+
+.guidelines-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #171a21;
+  border-bottom: 1px solid #2d3748;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #f1f5f9;
+  letter-spacing: 0.04em;
+}
+
+.guidelines-close {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 1.3rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  transition: color 0.2s;
+}
+.guidelines-close:hover { color: #f1f5f9; }
+
+.guidelines-body {
+  padding: 14px 16px 18px;
+}
+
+.g-section-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #3b82f6;
+  margin-bottom: 10px;
+}
+
+.g-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.g-row label {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  flex: 1;
+}
+
+.g-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #0f1117;
+  border: 1px solid #2d3748;
+  border-radius: 6px;
+  padding: 4px 8px;
+  transition: border-color 0.2s;
+}
+.g-input-wrap:focus-within { border-color: #3b82f6; }
+
+.g-input-wrap input {
+  width: 48px;
+  background: transparent;
+  border: none;
+  color: #f1f5f9;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: right;
+  outline: none;
+}
+.g-input-wrap input::-webkit-outer-spin-button,
+.g-input-wrap input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+.g-unit {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #475569;
+  letter-spacing: 0.04em;
+}
+
+.guidelines-slide-enter-active,
+.guidelines-slide-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.guidelines-slide-enter-from,
+.guidelines-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 .sidebar { flex: 0 0 v-bind(sidebarWidthPct + '%'); background-color: #1c2331; display: flex; flex-direction: column; overflow: hidden; height: 100%; }
@@ -1154,6 +1378,61 @@ watch(videoPlayer, (newPlayer) => { if (newPlayer) setupVideoSync() })
 .btn-duplicate:hover { background: rgba(49, 57, 65, 0.8); color: #fff; box-shadow: 0 2px 6px rgba(139, 92, 246, 0.4); }
 .btn-merge { background: rgba(49, 57, 65, 0.4); color: #fafafa; border: 1px solid rgba(0, 204, 153, 0.55); }
 .btn-merge:hover { background: rgba(49, 57, 65, 0.8); color: #fff; box-shadow: 0 2px 6px rgba(0, 204, 153, 0.4); }
+
+.cps-warning-icon {
+  align-self: center;
+  flex-shrink: 0;
+  cursor: default;
+  filter: drop-shadow(0 0 3px rgba(245, 158, 11, 0.4));
+}
+
+.cps-warning-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.cps-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  background: #1e2128;
+  border: 1px solid #f59e0b;
+  color: #fde68a;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  padding: 7px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  pointer-events: none;
+}
+
+.cps-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: 6px;
+  border: 5px solid transparent;
+  border-top-color: #f59e0b;
+}
+
+.cps-warning-wrapper:hover .cps-tooltip {
+  display: block;
+}
+
+.cps-tooltip-line {
+  padding: 1px 0;
+}
+.cps-tooltip-line + .cps-tooltip-line {
+  border-top: 1px solid rgba(245, 158, 11, 0.2);
+  margin-top: 4px;
+  padding-top: 4px;
+}
 
 .video-area { flex: 1;background-color: #1c2331; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; overflow: hidden; }
 .video-box { width: 90%; height: 90%; max-height: 90%; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }

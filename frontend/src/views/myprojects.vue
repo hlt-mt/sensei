@@ -395,7 +395,9 @@ onMounted(loadDashboard);
 
     <!-- Top Bar -->
     <header class="top-bar">
-      <div class="logo">Sensei</div>
+      <div class="logo">
+        <img src="/FBK_colour_transp.png" alt="FBK Logo" class="logo_photo">
+        Sensei</div>
       <div class="top-actions">
         <span v-if="profile" class="user-badge">
           <span class="user-dot"></span>
@@ -901,6 +903,11 @@ onMounted(loadDashboard);
   font-weight: 700;
   letter-spacing: 1px;
   color: #fff;
+}
+
+.logo_photo{
+  height: 40px;
+  width: 40px;
 }
 
 .top-actions {

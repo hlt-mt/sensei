@@ -253,7 +253,7 @@ function parseSrt(srtText) {
   return blocchi.map(blocco => {
     const righe = blocco.split(/\r?\n/)
     if (righe.length >= 3) {
-      return { timestamp: righe[1], testo: righe.slice(2).join(' ') }
+      return { timestamp: righe[1], testo: righe.slice(2).join('\n') }
     }
     return null
   }).filter(item => item !== null)
@@ -607,7 +607,7 @@ async function createProject() {
           subtitles = blocchiOriginal.map(blocco => {
           const righe = blocco.split(/\r?\n/);
           if (righe.length >= 3) {
-            return { timestamp: righe[1], testo: righe.slice(2).join(' ') };
+            return { timestamp: righe[1], testo: righe.slice(2).join('\n') };
           }
           return null;
         }).filter(item => item !== null);
@@ -618,7 +618,7 @@ async function createProject() {
     tranSubtitles = blocchiTradotti.map(blocco => {
       const righe = blocco.split(/\r?\n/);
       if (righe.length >= 3) {
-        return { timestamp: righe[1], testo: righe.slice(2).join(' ') };
+        return { timestamp: righe[1], testo: righe.slice(2).join('\n') };
       }
       return null;
     }).filter(item => item !== null);

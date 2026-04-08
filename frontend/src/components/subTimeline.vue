@@ -691,7 +691,7 @@ onUnmounted(() => {
               'sub-block-dragging': draggingSubtitle?.id === sub.id || resizingSubtitle?.id === sub.id,
               'sub-block-sidebar-active': activeSidebarTrack === 'orig',
               'sub-block-active': isSubtitleActive(sub),
-              'sub-block-orig-light': isLightMode
+              'sub-block-orig-active': isSubtitleActive(sub),
             }"
             :style="{ 
               position: 'absolute',
@@ -726,7 +726,7 @@ onUnmounted(() => {
               'sub-block-active': isSubtitleActive(sub),
               'sub-block-dragging': draggingSubtitle?.id === sub.id || resizingSubtitle?.id === sub.id,
               'sub-block-sidebar-active': activeSidebarTrack === 'tran',
-              'sub-block-tran-light': isLightMode
+              'sub-block-tran-active': isSubtitleActive(sub),
             }"
             :style="{ 
               position: 'absolute',
@@ -999,6 +999,14 @@ onUnmounted(() => {
   border-color: #8025f7 !important;
   box-shadow: 0 0 10px rgba(137, 41, 234, 0.6);
   z-index: 10;
+}
+
+.sub-block-orig-active {
+  background: rgba(181, 83, 206, 0.75);
+}
+
+.sub-block-tran-active {
+  background: rgba(83, 148, 253, 0.83)
 }
 
 .sub-block-text {
