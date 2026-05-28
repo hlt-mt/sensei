@@ -1,7 +1,7 @@
 <template>
   <div class="project-form-container">
     <div class="main-form">
-        <h1>Create your project now!</h1>
+      <h1>Create your project now!</h1>
       <p>Project name</p>
       <div class="form-floating mb-3">
         <input type="text" class="form-control" placeholder="My project" v-model="projectName">
@@ -20,8 +20,8 @@
         <p v-else>Selected file: {{ videoFile.name }}</p>
       </div>
 
-      <!-- Switch slider -->
-      <div class="srt-toggle-row">
+      <!-- Switch slider: solo in NORMAL -->
+      <div v-if="isNormal" class="srt-toggle-row">
         <span class="srt-toggle-label" :class="{ active: !srtMode }">Auto generate subtitles</span>
         <label class="switch">
           <input type="checkbox" v-model="srtMode" />
@@ -30,8 +30,8 @@
         <span class="srt-toggle-label" :class="{ active: srtMode }">Upload SRT files</span>
       </div>
 
-      <!-- AUTO MODE: language selects -->
-      <div v-if="!srtMode">
+      <!-- AUTO MODE: solo in NORMAL e solo se !srtMode -->
+      <div v-if="isNormal && !srtMode">
         <p>Source language</p>
         <select class="form-select mb-3" v-model="sourceLanguage">
           <option value="auto" v-if="!isAzureMode" selected="selected">[Auto-detect]</option>
@@ -51,9 +51,9 @@
         </select>
       </div>
 
-      <!-- SRT MODE: dropzones -->
-      <div v-else>
-        <p>Source language SRT </p>
+      <!-- SRT MODE: sempre visibile in LITE, visibile in NORMAL solo se srtMode -->
+      <div v-if="!isNormal || (isNormal && srtMode)">
+        <p>Source language SRT</p>
         <div
           class="dropzone srt-dropzone"
           :class="{ 'has-file': srtSourceFile }"
@@ -97,10 +97,10 @@
       <button class="btn btn-lg btn-light fw-bold" @click="handleCreate">Create</button>
     </div>
 
-    <div v-if="loading" class="loading-overlay">
+    <!-- Loading overlay: solo in NORMAL -->
+    <div v-if="isNormal && loading" class="loading-overlay">
       <div class="progress-container">
         <h2>Processing your video...</h2>
-        
         <div class="progress-section">
           <div class="progress-label">
             <span>Transcribing</span>
@@ -110,7 +110,6 @@
             <div class="progress-bar" :style="{ width: transcribingProgress + '%' }"></div>
           </div>
         </div>
-
         <div class="progress-section">
           <div class="progress-label">
             <span>Translating</span>
@@ -129,6 +128,7 @@
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
 import { useRouter } from 'vue-router'
+import { isNormal, isLite, isUltraLite } from '../config'
 
 const props = defineProps({
   userId: {
@@ -137,7 +137,7 @@ const props = defineProps({
   }
 })
 
-const targetLanguage = ref('');
+const targetLanguage = ref('')
 const router = useRouter()
 let loading = ref(false)
 const videoFile = ref(null)
@@ -145,39 +145,42 @@ const projectName = ref('')
 let subtitles = []
 let tranSubtitles = []
 
-const transcribingProgress = ref(0)
-const translatingProgress = ref(0)
+// In LITE srtMode è sempre true e non cambia mai
+const srtMode = ref(!isNormal ? true : false)
 
-// SRT mode toggle
-const srtMode = ref(false)
+
 const srtSourceFile = ref(null)
 const srtTargetFile = ref(null)
 
+// Progress: usate solo in NORMAL
+const transcribingProgress = ref(0)
+const translatingProgress = ref(0)
+
 const envValue = import.meta.env.VITE_REQUIRE_SOURCE_LANG
 const isAzureMode = computed(() => envValue === 'true')
-const sourceLanguage = ref(isAzureMode.value ? "" : "auto")
-
-const WHISPER_BASE = import.meta.env.VITE_WHISPER_BASE;
-const WHISPER_TOKEN = import.meta.env.VITE_WHISPER_TOKEN || '';
+const sourceLanguage = ref(isAzureMode.value ? '' : 'auto')
 
 const SERVICE_BASE = import.meta.env.VITE_SERVICE_BASE || 'https://api.matita.net/subtitles-admin'
 
-const endpointPost       = import.meta.env.VITE_ENDPOINT_POST       || '/conversion-start';
-const endpointStatus     = import.meta.env.VITE_ENDPOINT_STATUS     || '/conversion-status';
-const endpointOut        = import.meta.env.VITE_ENDPOINT_OUT        || '/conversion-out';
-const endpointTranslated = import.meta.env.VITE_ENDPOINT_TRANSLATED || '/conversion-translated';
+// Variabili Whisper: solo usate in NORMAL
+const WHISPER_BASE = isNormal ? import.meta.env.VITE_WHISPER_BASE : null
+const WHISPER_TOKEN = isNormal ? (import.meta.env.VITE_WHISPER_TOKEN || '') : ''
 
-const apiConversionPost       = `${WHISPER_BASE}${endpointPost}`;
-const apiConversionStatus     = `${WHISPER_BASE}${endpointStatus}`;
-const apiConversionOut        = `${WHISPER_BASE}${endpointOut}`;
-const apiConversionTranslated = `${WHISPER_BASE}${endpointTranslated}`;
+const endpointPost       = import.meta.env.VITE_ENDPOINT_POST       || '/conversion-start'
+const endpointStatus     = import.meta.env.VITE_ENDPOINT_STATUS     || '/conversion-status'
+const endpointOut        = import.meta.env.VITE_ENDPOINT_OUT        || '/conversion-out'
+const endpointTranslated = import.meta.env.VITE_ENDPOINT_TRANSLATED || '/conversion-translated'
 
-const apiAudioPost   = `${WHISPER_BASE}/audio-extraction-start`;
-const apiAudioStatus = `${WHISPER_BASE}/audio-extraction-status`; 
-const apiAudioGet    = `${WHISPER_BASE}/audio-extraction-out`;
+const apiConversionPost       = isNormal ? `${WHISPER_BASE}${endpointPost}`       : null
+const apiConversionStatus     = isNormal ? `${WHISPER_BASE}${endpointStatus}`     : null
+const apiConversionOut        = isNormal ? `${WHISPER_BASE}${endpointOut}`        : null
+const apiConversionTranslated = isNormal ? `${WHISPER_BASE}${endpointTranslated}` : null
 
+const apiAudioPost   = isNormal ? `${WHISPER_BASE}/audio-extraction-start`  : null
+const apiAudioStatus = isNormal ? `${WHISPER_BASE}/audio-extraction-status` : null
+const apiAudioGet    = isNormal ? `${WHISPER_BASE}/audio-extraction-out`    : null
 
-const tokenBearer = `Bearer ${WHISPER_TOKEN}`;
+const tokenBearer = isNormal ? `Bearer ${WHISPER_TOKEN}` : ''
 
 const apiAdmin = axios.create({ baseURL: SERVICE_BASE })
 
@@ -190,9 +193,7 @@ apiAdmin.interceptors.request.use((config) => {
 apiAdmin.interceptors.response.use(
   (response) => {
     const refreshed = response.headers['x-refresh-token']
-    if (refreshed) {
-      localStorage.setItem('subtitles_token', refreshed)
-    }
+    if (refreshed) localStorage.setItem('subtitles_token', refreshed)
     return response
   },
   (error) => Promise.reject(error)
@@ -223,12 +224,9 @@ function handleDrop(event) {
 
 function handleFileInput(event) {
   const files = event.target.files
-  if (files.length > 0) {
-    videoFile.value = files[0]
-  }
+  if (files.length > 0) videoFile.value = files[0]
 }
 
-// SRT drag & drop handlers
 function handleSrtDrop(event, type) {
   const files = event.dataTransfer.files
   if (files.length > 0 && files[0].name.endsWith('.srt')) {
@@ -247,7 +245,6 @@ function handleSrtInput(event, type) {
   }
 }
 
-// Parse SRT text into subtitles array
 function parseSrt(srtText) {
   const blocchi = srtText.trim().split(/\r?\n\r?\n/)
   return blocchi.map(blocco => {
@@ -269,8 +266,8 @@ function readFileAsText(file) {
 }
 
 function handleCreate() {
+  // In LITE srtMode è sempre true, in NORMAL dipende dallo switch
   if (srtMode.value) {
-    // SRT mode: at least one file required
     if (!srtSourceFile.value && !srtTargetFile.value) {
       alert('Carica almeno un file SRT.')
       return
@@ -296,16 +293,15 @@ function handleCreate() {
     return
   }
 
-  // Auto mode (original logic)
+  // Auto mode: solo raggiungibile in NORMAL
   if (!targetLanguage.value) {
-    alert('Seleziona la lingua di destinazione.');
-    return;
+    alert('Seleziona la lingua di destinazione.')
+    return
   }
   if (isAzureMode.value && !sourceLanguage.value) {
-    alert('Seleziona la lingua sorgente.');
-    return;
+    alert('Seleziona la lingua sorgente.')
+    return
   }
-
   if (!isLogged()) {
     localStorage.setItem('pendingProject', JSON.stringify({
       savedProjectName: projectName.value,
@@ -321,56 +317,59 @@ function handleCreate() {
 async function createProjectFromSrt() {
   try {
     loading.value = true
-
-    let srt2 = '' // source SRT raw text
-    let srt1 = '' // target SRT raw text
+    let srt2 = ''
+    let srt1 = ''
 
     if (srtSourceFile.value) {
       srt2 = await readFileAsText(srtSourceFile.value)
       subtitles = parseSrt(srt2)
       console.log('[NewProject SRT] Source subtitles parsed:', subtitles.length, 'blocchi')
     }
-
     if (srtTargetFile.value) {
       srt1 = await readFileAsText(srtTargetFile.value)
       tranSubtitles = parseSrt(srt1)
       console.log('[NewProject SRT] Target subtitles parsed:', tranSubtitles.length, 'blocchi')
     }
 
-    const now = new Date().toISOString()
-    const projectRes = await apiAdmin.post('/projects', {
-      name: projectName.value,
-      data: JSON.stringify({
-        srt1,
-        srt2,
-        playhead: 0,
-        videoName: videoFile.value.name,
-        created_at: now,
-        last_saved: now
-      })
-    })
+    let createdProject = null  
 
-    const createdProject = projectRes.data
-    console.log('[NewProject SRT] Progetto salvato:', createdProject)
+    if (!isUltraLite) {
+      const now = new Date().toISOString()
+      const projectRes = await apiAdmin.post('/projects', {
+        name: projectName.value,
+        data: JSON.stringify({
+          srt1,
+          srt2,
+          playhead: 0,
+          videoName: videoFile.value.name,
+          created_at: now,
+          last_saved: now
+        })
+      })
+      createdProject = projectRes.data  
+      console.log('[NewProject SRT] Progetto salvato:', createdProject)
+    }
 
     loading.value = false
 
     localStorage.setItem('subtitles', JSON.stringify(subtitles))
     localStorage.setItem('tranSubtitles', JSON.stringify(tranSubtitles))
-    localStorage.setItem('currentProjectId', createdProject.id)
-    localStorage.setItem('currentProjectName', createdProject.name)
-    localStorage.setItem('currentProjectUserId', createdProject.user_id)
+
+    if (createdProject) {
+      localStorage.setItem('currentProjectId', createdProject.id)
+      localStorage.setItem('currentProjectName', createdProject.name)
+      localStorage.setItem('currentProjectUserId', createdProject.user_id)
+    }
 
     router.push({
       name: 'video-player',
       state: {
         videoFile: videoFile.value,
-        project: createdProject,
+        project: createdProject, 
         subtitles: subtitles,
         tranSubtitles: tranSubtitles
       }
     })
-
   } catch (error) {
     console.error('[NewProject SRT] Errore:', error.message)
     loading.value = false
@@ -378,16 +377,17 @@ async function createProjectFromSrt() {
   }
 }
 
+// createProject: solo in NORMAL
 async function createProject() {
   if (!videoFile.value || !projectName.value.trim()) {
-    alert('Controlla i campi obbligatori.');
-    return;
+    alert('Controlla i campi obbligatori.')
+    return
   }
 
   try {
-    loading.value = true;
-    transcribingProgress.value = 0;
-    translatingProgress.value = 0;
+    loading.value = true
+    transcribingProgress.value = 0
+    translatingProgress.value = 0
 
     console.log('[NewProject] Avvio creazione progetto:', {
       projectName: projectName.value,
@@ -397,85 +397,73 @@ async function createProject() {
       videoSize: `${(videoFile.value?.size / 1024 / 1024).toFixed(2)} MB`,
       isAzureMode: isAzureMode.value,
       apiConversionPost
-    });
+    })
 
-    const params = {};
-    if (targetLanguage.value) {
-      params.target = targetLanguage.value;
-    }
-    if (isAzureMode.value) {
-      params.source = sourceLanguage.value;
-    }
+    const params = {}
+    if (targetLanguage.value) params.target = targetLanguage.value
+    if (isAzureMode.value) params.source = sourceLanguage.value
 
-    let audiofile = null;
+    let audiofile = null
 
     if (isAzureMode.value) {
-      const audioFormData = new FormData();
-      audioFormData.append('file', videoFile.value);
+      const audioFormData = new FormData()
+      audioFormData.append('file', videoFile.value)
 
       const conversionToAudio = await axios.post(apiAudioPost, audioFormData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-      const audioId = conversionToAudio.data.id;
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      const audioId = conversionToAudio.data.id
 
-      const maxAttemptsAudio = 3000;
-      const pollIntervalAudio = 1000;
-      let conversionCompletedAudio = false;
-      let lastTokenRefreshAudio = Date.now();
+      const maxAttemptsAudio = 3000
+      const pollIntervalAudio = 1000
+      let conversionCompletedAudio = false
+      let lastTokenRefreshAudio = Date.now()
 
       for (let attempt = 1; attempt <= maxAttemptsAudio; attempt++) {
         const statusResponseAudio = await axios.get(`${apiAudioStatus}?id=${audioId}`)
 
         if (Date.now() - lastTokenRefreshAudio > 10 * 60 * 1000) {
           try {
-            await apiAdmin.get('/me');
-            lastTokenRefreshAudio = Date.now();
-            console.log('[NewProject] Token matita aggiornato (audio)');
+            await apiAdmin.get('/me')
+            lastTokenRefreshAudio = Date.now()
+            console.log('[NewProject] Token matita aggiornato (audio)')
           } catch (e) {
-            console.warn('[NewProject] Keep-alive token fallito (audio):', e.message);
+            console.warn('[NewProject] Keep-alive token fallito (audio):', e.message)
           }
         }
 
-        const { state, error, stage, progress } = statusResponseAudio.data;
-        console.log(`[NewProject] Audio Poll #${attempt} - status: "${state}" | stage: "${stage}" | progress: ${progress ?? 'n/a'}`);
+        const { state, error, stage, progress } = statusResponseAudio.data
+        console.log(`[NewProject] Audio Poll #${attempt} - status: "${state}" | stage: "${stage}" | progress: ${progress ?? 'n/a'}`)
 
         if (state === 'completed') {
-          conversionCompletedAudio = true;
-          console.log('[NewProject] Conversione Audio completata!');
-          break;
+          conversionCompletedAudio = true
+          console.log('[NewProject] Conversione Audio completata!')
+          break
+        }
+        if (state === 'failed' || state === 'error') {
+          console.error('[NewProject] Conversione Audio fallita. Errore server:', error)
+          throw new Error(error || 'Conversione audio fallita')
         }
 
-        if (state === 'failed' || status === 'error') {
-          console.error('[NewProject] Conversione Audio fallita. Errore server:', error);
-          throw new Error(error || 'Conversione audio fallita');
-        }
-
-        await new Promise(resolve => setTimeout(resolve, pollIntervalAudio));
+        await new Promise(resolve => setTimeout(resolve, pollIntervalAudio))
       }
 
-      if (!conversionCompletedAudio) {
-        throw new Error('Timeout: conversione audio non completata');
-      }
+      if (!conversionCompletedAudio) throw new Error('Timeout: conversione audio non completata')
 
-      audiofile = await axios.get(`${apiAudioGet}?id=${audioId}`, {
-        responseType: 'blob'
-      });
-
-      console.log('[NewProject] Audio estratto:', audiofile.data);
+      audiofile = await axios.get(`${apiAudioGet}?id=${audioId}`, { responseType: 'blob' })
+      console.log('[NewProject] Audio estratto:', audiofile.data)
     }
 
-    const formData = new FormData();
+    const formData = new FormData()
     if (isAzureMode.value) {
-      formData.append('audiofile', audiofile.data, 'audio.wav');
-      formData.append('source', params.source);
-      formData.append('target', params.target);
+      formData.append('audiofile', audiofile.data, 'audio.wav')
+      formData.append('source', params.source)
+      formData.append('target', params.target)
     } else {
-      formData.append('file', videoFile.value);
+      formData.append('file', videoFile.value)
     }
 
-    console.log('[NewProject] Invio a:', apiConversionPost, '| Params:', params);
+    console.log('[NewProject] Invio a:', apiConversionPost, '| Params:', params)
 
     const conversionJob = await axios.post(apiConversionPost, formData, {
       headers: {
@@ -483,94 +471,86 @@ async function createProject() {
         'Content-Type': 'multipart/form-data'
       },
       params
-    });
+    })
 
     const jobId = isAzureMode.value
       ? conversionJob.data.data.id
-      : conversionJob.data.id;
-    
-    console.log('[NewProject] Job avviato, ID:', jobId, '| Risposta completa:', conversionJob.data);
+      : conversionJob.data.id
 
-    const maxAttempts = 3000;
-    const pollInterval = 1000;
-    let conversionCompleted = false;
-    let lastTokenRefresh = Date.now();
+    console.log('[NewProject] Job avviato, ID:', jobId, '| Risposta completa:', conversionJob.data)
+
+    const maxAttempts = 12000
+    const pollInterval = 1000
+    let conversionCompleted = false
+    let lastTokenRefresh = Date.now()
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-  const statusResponse = await axios.get(`${apiConversionStatus}?id=${jobId}`, {
-    headers: isAzureMode.value ? {} : { 'Authorization': tokenBearer }
-  });
+      const statusResponse = await axios.get(`${apiConversionStatus}?id=${jobId}`, {
+        headers: isAzureMode.value ? {} : { 'Authorization': tokenBearer }
+      })
 
-  if (Date.now() - lastTokenRefresh > 10 * 60 * 1000) {
-    try {
-      await apiAdmin.get('/me');
-      lastTokenRefresh = Date.now();
-      console.log('[NewProject] Token matita aggiornato');
-    } catch (e) {
-      console.warn('[NewProject] Keep-alive token fallito:', e.message);
+      if (Date.now() - lastTokenRefresh > 10 * 60 * 1000) {
+        try {
+          await apiAdmin.get('/me')
+          lastTokenRefresh = Date.now()
+          console.log('[NewProject] Token matita aggiornato')
+        } catch (e) {
+          console.warn('[NewProject] Keep-alive token fallito:', e.message)
+        }
+      }
+
+      const responseData = isAzureMode.value ? statusResponse.data.data : statusResponse.data
+
+      if (isAzureMode.value) {
+        const { id, state, stage, progress } = responseData
+        console.log(`[NewProject] Poll #${attempt} - state: "${state}" | id: ${id} | stage: "${stage}" | progress: ${progress ?? 'n/a'}`)
+
+        if (stage === 'transcribing') transcribingProgress.value = Math.trunc(progress || 0)
+        else if (stage === 'translating') {
+          transcribingProgress.value = 100
+          translatingProgress.value = Math.trunc(progress || 0)
+        }
+
+        if (state === 'ready') {
+          transcribingProgress.value = 100
+          translatingProgress.value = 100
+          conversionCompleted = true
+          console.log('[NewProject] Conversione completata!')
+          break
+        }
+        if (state === 'fail' || state === 'unknown') {
+          console.error('[NewProject] Conversione fallita. State:', state)
+          throw new Error(`Conversione fallita: ${state}`)
+        }
+      } else {
+        const { status, error, stage, progress } = responseData
+        console.log(`[NewProject] Poll #${attempt} - status: "${status}" | stage: "${stage}" | progress: ${progress ?? 'n/a'}`)
+
+        if (stage === 'transcribing') transcribingProgress.value = Math.trunc(progress || 0)
+        else if (stage === 'translating') {
+          transcribingProgress.value = 100
+          translatingProgress.value = Math.trunc(progress || 0)
+        }
+
+        if (status === 'completed') {
+          transcribingProgress.value = 100
+          translatingProgress.value = 100
+          conversionCompleted = true
+          console.log('[NewProject] Conversione completata!')
+          break
+        }
+        if (status === 'failed' || status === 'error') {
+          console.error('[NewProject] Conversione fallita. Errore server:', error)
+          throw new Error(error || 'Conversione fallita')
+        }
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollInterval))
     }
-  }
-
-    const responseData = isAzureMode.value
-    ? statusResponse.data.data
-    : statusResponse.data;
-  
-
-  if (isAzureMode.value) {
-    const { id, state, stage, progress} = responseData;
-    console.log(`[NewProject] Poll #${attempt} - state: "${state}" | id: ${id} | stage: "${stage}" | progress: ${progress ?? 'n/a'}`);
-
-    if (stage === 'transcribing') {
-      transcribingProgress.value = Math.trunc(progress || 0);
-    } else if (stage === 'translating') {
-      transcribingProgress.value = 100;
-      translatingProgress.value = Math.trunc(progress || 0);
-    }
-
-    if (state === 'ready') {
-      transcribingProgress.value = 100;
-      translatingProgress.value = 100;
-      conversionCompleted = true;
-      console.log('[NewProject] Conversione completata!');
-      break;
-    }
-
-    if (state === 'fail' || state === 'unknown') {
-      console.error('[NewProject] Conversione fallita. State:', state);
-      throw new Error(`Conversione fallita: ${state}`);
-    }
-
-  } else {
-    const { status, error, stage, progress } = responseData;
-    console.log(`[NewProject] Poll #${attempt} - status: "${status}" | stage: "${stage}" | progress: ${progress ?? 'n/a'}`);
-
-    if (stage === 'transcribing') {
-      transcribingProgress.value = Math.trunc(progress || 0);
-    } else if (stage === 'translating') {
-      transcribingProgress.value = 100;
-      translatingProgress.value = Math.trunc(progress || 0);
-    }
-
-    if (status === 'completed') {
-      transcribingProgress.value = 100;
-      translatingProgress.value = 100;
-      conversionCompleted = true;
-      console.log('[NewProject] Conversione completata!');
-      break;
-    }
-
-    if (status === 'failed' || status === 'error') {
-      console.error('[NewProject] Conversione fallita. Errore server:', error);
-      throw new Error(error || 'Conversione fallita');
-    }
-  }
-
-  await new Promise(resolve => setTimeout(resolve, pollInterval)); 
-}
 
     if (!conversionCompleted) {
-      console.error('[NewProject] Timeout raggiunto dopo', maxAttempts, 'tentativi');
-      throw new Error('Timeout: conversione non completata');
+      console.error('[NewProject] Timeout raggiunto dopo', maxAttempts, 'tentativi')
+      throw new Error('Timeout: conversione non completata')
     }
 
     if (!isAzureMode.value) {
@@ -578,73 +558,65 @@ async function createProject() {
         const sourceResponse = await axios.get(
           `${WHISPER_BASE}/conversion-lang?id=${jobId}`,
           { headers: { 'Authorization': tokenBearer } }
-        );
-        sourceLanguage.value = sourceResponse.data;
-        console.log('[NewProject] Lingua sorgente rilevata:', sourceLanguage.value);
+        )
+        sourceLanguage.value = sourceResponse.data
+        console.log('[NewProject] Lingua sorgente rilevata:', sourceLanguage.value)
       } catch (e) {
-        console.warn('[NewProject] Impossibile recuperare la lingua sorgente:', e.message);
+        console.warn('[NewProject] Impossibile recuperare la lingua sorgente:', e.message)
       }
     }
 
-    console.log('[NewProject] Recupero SRT originale da:', `${apiConversionOut}?id=${jobId}`);
+    console.log('[NewProject] Recupero SRT originale da:', `${apiConversionOut}?id=${jobId}`)
     const originalResponse = await axios.get(`${apiConversionOut}?id=${jobId}`, {
       headers: isAzureMode.value ? {} : { 'Authorization': tokenBearer }
-    });
+    })
+    const rawOriginal = originalResponse.data
 
-    const rawOriginal = originalResponse.data;
+    console.log('[NewProject] Recupero SRT tradotto da:', `${apiConversionTranslated}?id=${jobId}`)
+    const translatedResponse = await axios.get(`${apiConversionTranslated}?id=${jobId}`, {
+      headers: isAzureMode.value ? {} : { 'Authorization': tokenBearer }
+    })
+    const rawTranslated = translatedResponse.data
 
-        console.log('[NewProject] Recupero SRT tradotto da:', `${apiConversionTranslated}?id=${jobId}`);
-        const translatedResponse = await axios.get(`${apiConversionTranslated}?id=${jobId}`, {
-          headers: isAzureMode.value ? {} : { 'Authorization': tokenBearer }
-        });
-        const rawTranslated = translatedResponse.data;
+    const srt2 = isAzureMode.value ? rawTranslated : rawOriginal
+    const srt1 = isAzureMode.value ? rawOriginal   : rawTranslated
 
-        // Azure restituisce i due SRT invertiti, quindi li swappiamo
-        const srt2 = isAzureMode.value ? rawTranslated : rawOriginal;
-        const srt1 = isAzureMode.value ? rawOriginal   : rawTranslated;
+    const blocchiOriginal = srt2.trim().split(/\r?\n\r?\n/)
+    subtitles = blocchiOriginal.map(blocco => {
+      const righe = blocco.split(/\r?\n/)
+      if (righe.length >= 3) return { timestamp: righe[1], testo: righe.slice(2).join('\n') }
+      return null
+    }).filter(item => item !== null)
+    console.log('[NewProject] SRT originale: ...')
 
-        const blocchiOriginal = srt2.trim().split(/\r?\n\r?\n/);
-          subtitles = blocchiOriginal.map(blocco => {
-          const righe = blocco.split(/\r?\n/);
-          if (righe.length >= 3) {
-            return { timestamp: righe[1], testo: righe.slice(2).join('\n') };
-          }
-          return null;
-        }).filter(item => item !== null);
-
-        console.log(`[NewProject] SRT originale: ...`)
-
-    const blocchiTradotti = srt1.trim().split(/\r?\n\r?\n/);
+    const blocchiTradotti = srt1.trim().split(/\r?\n\r?\n/)
     tranSubtitles = blocchiTradotti.map(blocco => {
-      const righe = blocco.split(/\r?\n/);
-      if (righe.length >= 3) {
-        return { timestamp: righe[1], testo: righe.slice(2).join('\n') };
-      }
-      return null;
-    }).filter(item => item !== null);
+      const righe = blocco.split(/\r?\n/)
+      if (righe.length >= 3) return { timestamp: righe[1], testo: righe.slice(2).join('\n') }
+      return null
+    }).filter(item => item !== null)
+    console.log(`[NewProject] SRT tradotto: ${tranSubtitles.length} blocchi. Primi 2:`, tranSubtitles.slice(0, 2))
 
-    console.log(`[NewProject] SRT tradotto: ${tranSubtitles.length} blocchi. Primi 2:`, tranSubtitles.slice(0, 2));
-
-    console.log('[NewProject] Salvataggio progetto su API admin...');
-    const now = new Date().toISOString();
+    console.log('[NewProject] Salvataggio progetto su API admin...')
+    const now = new Date().toISOString()
     const projectRes = await apiAdmin.post('/projects', {
-        name: projectName.value,
-        data: JSON.stringify({ 
-          srt1, 
-          srt2, 
-          playhead: 0, 
-          videoName: videoFile.value.name,
-          sourceLanguage: sourceLanguage.value,
-          targetLanguage: targetLanguage.value,
-          created_at: now,
-          last_saved: now
-        })
-      });
+      name: projectName.value,
+      data: JSON.stringify({
+        srt1,
+        srt2,
+        playhead: 0,
+        videoName: videoFile.value.name,
+        sourceLanguage: sourceLanguage.value,
+        targetLanguage: targetLanguage.value,
+        created_at: now,
+        last_saved: now
+      })
+    })
 
-    const createdProject = projectRes.data;
-    console.log('[NewProject] Progetto salvato:', createdProject);
+    const createdProject = projectRes.data
+    console.log('[NewProject] Progetto salvato:', createdProject)
 
-    loading.value = false;
+    loading.value = false
 
     localStorage.setItem('subtitles', JSON.stringify(subtitles))
     localStorage.setItem('tranSubtitles', JSON.stringify(tranSubtitles))
@@ -652,8 +624,7 @@ async function createProject() {
     localStorage.setItem('currentProjectName', createdProject.name)
     localStorage.setItem('currentProjectUserId', createdProject.user_id)
 
-    console.log('[NewProject] Redirect a video-player con progetto ID:', createdProject.id);
-
+    console.log('[NewProject] Redirect a video-player con progetto ID:', createdProject.id)
     router.push({
       name: 'video-player',
       state: {
@@ -662,19 +633,17 @@ async function createProject() {
         subtitles: subtitles,
         tranSubtitles: tranSubtitles
       }
-    });
-
+    })
   } catch (error) {
-    console.error('[NewProject] Errore durante la creazione:', error.message);
-    console.error('[NewProject] Response status:', error.response?.status);
-    console.error('[NewProject] Response data:', error.response?.data);
-    console.error('[NewProject] Stack trace:', error.stack);
-    loading.value = false;
-    alert(`Errore: ${error.message}`);
+    console.error('[NewProject] Errore durante la creazione:', error.message)
+    console.error('[NewProject] Response status:', error.response?.status)
+    console.error('[NewProject] Response data:', error.response?.data)
+    console.error('[NewProject] Stack trace:', error.stack)
+    loading.value = false
+    alert(`Errore: ${error.message}`)
   }
 }
 </script>
-
 <style scoped>
 p {
   text-align: left;

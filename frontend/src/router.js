@@ -3,6 +3,7 @@ import Home from './views/Home.vue'
 import editingView from './views/editingView.vue'
 import login from './views/login.vue'
 import Myprojects from './views/myprojects.vue'
+import formView from './views/formView.vue'
 
 
 const routes = [
@@ -10,7 +11,8 @@ const routes = [
   { path: '/home', component: Home },
   { path: '/editor', name: 'video-player',component: editingView},
   { path: '/login', component: login},
-  { path: '/myprojects', component: Myprojects}
+  { path: '/myprojects', component: Myprojects},
+  { path: '/formView', component: formView},
 ]
 
 const router = createRouter({

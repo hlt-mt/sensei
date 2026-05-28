@@ -146,6 +146,7 @@ const handleLogin = async () => {
 .logo_photo{
   height: 40px;
   width: 40px;
+  margin-right: 12px;
 }
 
 .glass-btn:hover {

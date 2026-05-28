@@ -44,15 +44,19 @@ const snapshotSaved = ref(false)
 const wavesurferInstance = ref(null)
 const waveformContainer = ref(null)
 
+// ─── Minimap refs ─────────────────────────────────────────────────────────────
+const minimap = ref(null)
+const isDraggingMinimap = ref(false)
+const minimapDragStartX = ref(0)
+const minimapDragStartScroll = ref(0)
+const minimapScrollTick = ref(0)
+
 const stopAtTime = ref(null)
 
 // ─── Track availability ───────────────────────────────────────────────────────
 const hasOriginal = computed(() => props.subtitles && props.subtitles.length > 0)
 const hasTranslation = computed(() => props.tranSubtitles && props.tranSubtitles.length > 0)
 
-// ─── Dynamic layout rows based on which tracks exist ─────────────────────────
-// Row heights: waveform=60px, orig=60px, tran=60px
-// top offsets for subtitle blocks depend on which tracks are visible
 const origTop = computed(() => `${props.waveformHeight + 10}px`)
 const tranTop = computed(() =>
   hasOriginal.value
@@ -66,6 +70,79 @@ const trackAreaHeight = computed(() => {
   if (hasOriginal.value || hasTranslation.value) return `${wh + TRACK_HEIGHT}px`
   return `${wh}px`
 })
+
+const totalWidth = computed(() => (props.duration || 0) * props.pixelsPerSecond)
+
+// ─── Minimap thumb — dipende da minimapScrollTick per reagire allo scroll ─────
+const thumbStyle = computed(() => {
+  minimapScrollTick.value // dipendenza reattiva sullo scroll
+  if (!timelineWrapper.value || !minimap.value || totalWidth.value === 0) {
+    return { left: '0px', width: '20%' }
+  }
+  const containerWidth = timelineWrapper.value.clientWidth
+  const scrollLeft = timelineWrapper.value.scrollLeft
+  const minimapWidth = minimap.value.clientWidth
+  const ratio = Math.min(1, containerWidth / totalWidth.value)
+  const thumbW = Math.max(16, minimapWidth * ratio)
+  const maxScroll = totalWidth.value - containerWidth
+  const scrollFraction = maxScroll > 0 ? scrollLeft / maxScroll : 0
+  const maxThumbLeft = minimapWidth - thumbW
+  const thumbL = scrollFraction * maxThumbLeft
+  return {
+    left: `${thumbL}px`,
+    width: `${thumbW}px`
+  }
+})
+
+// ─── Minimap handlers ─────────────────────────────────────────────────────────
+const handleMinimapMouseDown = (event) => {
+  if (!timelineWrapper.value || !minimap.value) return
+  event.preventDefault()
+
+  const rect = minimap.value.getBoundingClientRect()
+  const minimapWidth = minimap.value.clientWidth
+  const containerWidth = timelineWrapper.value.clientWidth
+  const ratio = Math.min(1, containerWidth / totalWidth.value)
+  const thumbW = Math.max(16, minimapWidth * ratio)
+  const clickX = event.clientX - rect.left
+
+  // Salta subito alla posizione cliccata, centrando il thumb
+  const maxThumbLeft = minimapWidth - thumbW
+  const targetThumbLeft = Math.max(0, Math.min(clickX - thumbW / 2, maxThumbLeft))
+  const maxScroll = totalWidth.value - containerWidth
+  const newScroll = maxThumbLeft > 0 ? (targetThumbLeft / maxThumbLeft) * maxScroll : 0
+  timelineWrapper.value.scrollLeft = newScroll
+
+  isDraggingMinimap.value = true
+  minimapDragStartX.value = event.clientX
+  minimapDragStartScroll.value = timelineWrapper.value.scrollLeft
+  document.body.style.cursor = 'grabbing'
+  document.body.style.userSelect = 'none'
+}
+
+const handleMinimapMouseMove = (event) => {
+  if (!isDraggingMinimap.value || !timelineWrapper.value || !minimap.value) return
+  const minimapWidth = minimap.value.clientWidth
+  const containerWidth = timelineWrapper.value.clientWidth
+  const ratio = Math.min(1, containerWidth / totalWidth.value)
+  const thumbW = Math.max(16, minimapWidth * ratio)
+  const maxThumbLeft = minimapWidth - thumbW
+  const maxScroll = totalWidth.value - containerWidth
+
+  const deltaX = event.clientX - minimapDragStartX.value
+  const scrollDelta = maxThumbLeft > 0 ? (deltaX / maxThumbLeft) * maxScroll : 0
+  timelineWrapper.value.scrollLeft = Math.max(
+    0,
+    Math.min(minimapDragStartScroll.value + scrollDelta, maxScroll)
+  )
+}
+
+const handleMinimapMouseUp = () => {
+  if (!isDraggingMinimap.value) return
+  isDraggingMinimap.value = false
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+}
 
 const isLightMode = ref(document.body.classList.contains('light-mode'))
 
@@ -140,14 +217,12 @@ const activeSidebarTrack = ref(
   props.activeTrack ?? (!props.subtitles?.length && props.tranSubtitles?.length ? 'tran' : 'orig')
 )
 
-// Sync from parent (sidebar tab clicks)
 watch(() => props.activeTrack, (val) => {
   if (val && val !== activeSidebarTrack.value) {
     activeSidebarTrack.value = val
   }
 })
 
-// Auto-switch if the active track becomes empty
 watch([hasOriginal, hasTranslation], () => {
   if (activeSidebarTrack.value === 'orig' && !hasOriginal.value && hasTranslation.value) {
     activeSidebarTrack.value = 'tran'
@@ -270,7 +345,7 @@ const handleSubtitleClick = (sub, type) => {
   if (props.videoRef) {
     const videoElement = props.videoRef.value || props.videoRef
     videoElement.currentTime = sub.start
-    stopAtTime.value = sub.start + (sub.duration -0.001)                        
+    stopAtTime.value = sub.start + (sub.duration - 0.001)                        
     if (onSubtitleSelect) {
       onSubtitleSelect(sub.id)
     }
@@ -319,6 +394,7 @@ watch(currentTime, (newVal) => {
       left: playheadPosition - margin,
       behavior: 'smooth'
     })
+    minimapScrollTick.value++
     setTimeout(() => { scrollCooldown = false }, 1000)
   }
 })
@@ -398,30 +474,30 @@ const handlePlayheadMouseDown = (event) => {
 
 const handleMouseMove = (event) => {
   if (isDragging.value && !draggingSubtitle.value && !resizingSubtitle.value) {
-  if (!props.videoRef || !timelineWrapper.value) return
-  const videoElement = props.videoRef.value || props.videoRef
-  const rect = timelineWrapper.value.getBoundingClientRect()
-  const clickX = event.clientX - rect.left + timelineWrapper.value.scrollLeft
-  const newTime = Math.max(0, Math.min(clickX / props.pixelsPerSecond, props.duration))
-  videoElement.currentTime = newTime
+    if (!props.videoRef || !timelineWrapper.value) return
+    const videoElement = props.videoRef.value || props.videoRef
+    const rect = timelineWrapper.value.getBoundingClientRect()
+    const clickX = event.clientX - rect.left + timelineWrapper.value.scrollLeft
+    const newTime = Math.max(0, Math.min(clickX / props.pixelsPerSecond, props.duration))
+    videoElement.currentTime = newTime
 
-  const container = timelineWrapper.value
-  const containerWidth = container.clientWidth
-  const playheadPosition = newTime * props.pixelsPerSecond
-  const visibleStart = container.scrollLeft
-  const visibleEnd = visibleStart + containerWidth
+    const container = timelineWrapper.value
+    const containerWidth = container.clientWidth
+    const playheadPosition = newTime * props.pixelsPerSecond
+    const visibleStart = container.scrollLeft
+    const visibleEnd = visibleStart + containerWidth
 
-  if ((playheadPosition < visibleStart || playheadPosition > visibleEnd) && !scrollCooldown) {
-    scrollCooldown = true
-    container.scrollTo({
-      left: Math.max(0, playheadPosition - containerWidth * 0.5),
-      behavior: 'smooth'
-    })
-    setTimeout(() => { scrollCooldown = false }, 1000) 
+    if ((playheadPosition < visibleStart || playheadPosition > visibleEnd) && !scrollCooldown) {
+      scrollCooldown = true
+      container.scrollTo({
+        left: Math.max(0, playheadPosition - containerWidth * 0.5),
+        behavior: 'smooth'
+      })
+      setTimeout(() => { scrollCooldown = false }, 1000) 
+    }
+    stopAtTime.value = null
+    return
   }
-  stopAtTime.value = null
-  return
-}
 
   const isTran = subtitleType.value === 'tran'
   const currentData = isTran ? processedTranSubtitles.value : processedSubtitles.value
@@ -548,7 +624,6 @@ onMounted(() => {
 
     videoElement.addEventListener('seeked', () => {
       if (isDragging.value) return
-
       if (timelineWrapper.value) {
         const container = timelineWrapper.value
         const containerWidth = container.clientWidth
@@ -565,8 +640,20 @@ onMounted(() => {
     })
     videoSrc.value = getVideoSrc()
   }
+
+  // Listener scroll per aggiornare il thumb del minimap
+  nextTick(() => {
+    if (timelineWrapper.value) {
+      timelineWrapper.value.addEventListener('scroll', () => {
+        minimapScrollTick.value++
+      })
+    }
+  })
+
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('mouseup', handleMouseUp)
+  document.addEventListener('mousemove', handleMinimapMouseMove)
+  document.addEventListener('mouseup', handleMinimapMouseUp)
 })
 
 onUnmounted(() => {
@@ -574,15 +661,17 @@ onUnmounted(() => {
   if (wavesurferInstance.value) wavesurferInstance.value.destroy()
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseup', handleMouseUp)
+  document.removeEventListener('mousemove', handleMinimapMouseMove)
+  document.removeEventListener('mouseup', handleMinimapMouseUp)
 })
 </script>
 
 <template>
   <div class="container">
+    <!-- Colonna sinistra: label tracce -->
     <div class="left" :style="{ gridTemplateRows: leftGridRows }">
       <div class="waveform-label">Waveform</div>
 
-      <!-- Original track label — only if subtitles exist -->
       <div v-if="hasOriginal" class="track-label">
         <span>Original</span>
         <button
@@ -603,7 +692,6 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <!-- Translated track label — only if tranSubtitles exist -->
       <div v-if="hasTranslation" class="track-label">
         <span>Translated</span>
         <button
@@ -625,137 +713,185 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="timeline-wrapper" ref="timelineWrapper">
-      <div 
-        class="ruler" 
-        :style="{ width: (duration * pixelsPerSecond) + 'px' }"
+    <!-- Colonna destra: minimap fisso + timeline scrollabile -->
+    <div class="timeline-column">
+
+      <!-- MINIMAP — fuori dal wrapper scrollabile, occupa sempre tutta la larghezza -->
+      <div
+        class="minimap"
+        ref="minimap"
+        @mousedown="handleMinimapMouseDown"
       >
-        <div
-          v-if="isDragging"
-          class="playhead-tooltip"
-          :style="{ left: (currentTime * pixelsPerSecond) + 'px' }"
-        >
-          {{ formatPlayheadTime(currentTime) }}
-        </div>
-        <div 
-          v-for="time in timeMarkers" 
-          :key="time" 
-          class="marker-group"
-          :style="{ left: (time * pixelsPerSecond) + 'px' }"
-        >
-          <span class="time-label">{{ formatTime(time) }}</span>
-          <div class="tick-major"></div>
-        </div>
-      </div>
-
-      <div class="track-area" :style="{ width: (duration * pixelsPerSecond) + 'px', height: trackAreaHeight }">
-        <div
-          v-if="activeDragSub"
-          class="subtitle-drag-tooltip"
-          :style="{
-            left: ((activeDragSub.start + activeDragSub.duration / 2) * pixelsPerSecond) + 'px',
-            top: subtitleType === 'tran' ? tranTop : origTop
-          }"
-        >
-          {{ formatPlayheadTime(activeDragSub.start) }} &#8594; {{ formatPlayheadTime(activeDragSub.start + activeDragSub.duration) }}
-        </div>
-        <div 
-          class="playhead" 
-          :style="{ transform: `translateX(${currentTime * pixelsPerSecond}px)` }"
-          @mousedown="handlePlayheadMouseDown"
-        >
-          <div class="playhead-line" :style="{ 
-            height: `calc(${trackAreaHeight} + 30px)`,
-            background: playheadColor,
-            boxShadow: playheadShadow
-          }"></div>
-        </div>
-
-        <div
-          ref="waveformContainer"
-          class="waveform-track"
-          :style="{ width: waveformWidth + 'px', height: waveformHeight + 'px' }"
-        >
-          <div v-if="!videoSrc" class="waveform-placeholder">
-            Caricamento video...
-          </div>
-        </div>
-
-        <!-- Original track — only if subtitles exist -->
         <template v-if="hasOriginal">
-          <div 
-            v-for="sub in processedSubtitles" 
-            :key="'orig-' + sub.id"
-            class="sub-block sub-block-orig"
-            :class="{ 
-              'sub-block-dragging': draggingSubtitle?.id === sub.id || resizingSubtitle?.id === sub.id,
-              'sub-block-sidebar-active': activeSidebarTrack === 'orig',
-              'sub-block-active': isSubtitleActive(sub),
-              'sub-block-orig-active': isSubtitleActive(sub),
+          <div
+            v-for="sub in processedSubtitles"
+            :key="'mm-orig-' + sub.id"
+            class="minimap-seg minimap-seg-orig"
+            :style="{
+              left: ((sub.start / (duration || 1)) * 100) + '%',
+              width: Math.max(0.2, (sub.duration / (duration || 1)) * 100) + '%'
             }"
-            :style="{ 
-              position: 'absolute',
-              left: '0px',
-              top: origTop,
-              width: (sub.duration * pixelsPerSecond) + 'px',
-              transform: `translateX(${sub.start * pixelsPerSecond}px)` 
-            }"
-            :title="sub.originalTimestamp"
-            @click="handleSubtitleClick(sub, 'orig')"
-            @mousedown="(e) => handleSubtitleMouseDown(e, sub, null, 'orig')"
-          >
-            <div 
-              class="resize-handle resize-handle-left"
-              @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'left', 'orig')"
-            ></div>
-            <span class="sub-block-text">{{ sub.text }}</span>
-            <div 
-              class="resize-handle resize-handle-right"
-              @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'right', 'orig')"
-            ></div>
-          </div>
+          />
         </template>
-        
-        <!-- Translated track — only if tranSubtitles exist -->
         <template v-if="hasTranslation">
-          <div 
-            v-for="sub in processedTranSubtitles" 
-            :key="'tran-' + sub.id"
-            class="sub-block sub-block-tran"
-            :class="{ 
-              'sub-block-active': isSubtitleActive(sub),
-              'sub-block-dragging': draggingSubtitle?.id === sub.id || resizingSubtitle?.id === sub.id,
-              'sub-block-sidebar-active': activeSidebarTrack === 'tran',
-              'sub-block-tran-active': isSubtitleActive(sub),
+          <div
+            v-for="sub in processedTranSubtitles"
+            :key="'mm-tran-' + sub.id"
+            class="minimap-seg minimap-seg-tran"
+            :style="{
+              left: ((sub.start / (duration || 1)) * 100) + '%',
+              width: Math.max(0.2, (sub.duration / (duration || 1)) * 100) + '%'
             }"
-            :style="{ 
-              position: 'absolute',
-              left: '0px',
-              top: tranTop,
-              width: (sub.duration * pixelsPerSecond) + 'px',
-              transform: `translateX(${sub.start * pixelsPerSecond}px)` 
-            }"
-            :title="sub.originalTimestamp"
-            @click="handleSubtitleClick(sub, 'tran')"
-            @mousedown="(e) => handleSubtitleMouseDown(e, sub, null, 'tran')"
-          >
-            <div 
-              class="resize-handle resize-handle-left"
-              @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'left', 'tran')"
-            ></div>
-            <span class="sub-block-text">{{ sub.text }}</span>
-            <div 
-              class="resize-handle resize-handle-right"
-              @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'right', 'tran')"
-            ></div>
-          </div>
+          />
         </template>
+        <!-- Playhead nel minimap -->
+        <div
+          class="minimap-playhead"
+          :style="{ left: ((currentTime / (duration || 1)) * 100) + '%' }"
+        />
+        <!-- Thumb trascinabile -->
+        <div
+          class="minimap-thumb"
+          :class="{ 'minimap-thumb-dragging': isDraggingMinimap }"
+          :style="thumbStyle"
+        />
       </div>
+
+      <!-- TIMELINE SCROLLABILE -->
+      <div class="timeline-wrapper" ref="timelineWrapper">
+        <div 
+          class="ruler" 
+          :style="{ width: (duration * pixelsPerSecond) + 'px' }"
+        >
+          <div
+            v-if="isDragging"
+            class="playhead-tooltip"
+            :style="{ left: (currentTime * pixelsPerSecond) + 'px' }"
+          >
+            {{ formatPlayheadTime(currentTime) }}
+          </div>
+          <div 
+            v-for="time in timeMarkers" 
+            :key="time" 
+            class="marker-group"
+            :style="{ left: (time * pixelsPerSecond) + 'px' }"
+          >
+            <span class="time-label">{{ formatTime(time) }}</span>
+            <div class="tick-major"></div>
+          </div>
+        </div>
+
+        <div class="track-area" :style="{ width: (duration * pixelsPerSecond) + 'px', height: trackAreaHeight }">
+          <div
+            v-if="activeDragSub"
+            class="subtitle-drag-tooltip"
+            :style="{
+              left: ((activeDragSub.start + activeDragSub.duration / 2) * pixelsPerSecond) + 'px',
+              top: subtitleType === 'tran' ? tranTop : origTop
+            }"
+          >
+            {{ formatPlayheadTime(activeDragSub.start) }} &#8594; {{ formatPlayheadTime(activeDragSub.start + activeDragSub.duration) }}
+          </div>
+          <div 
+            class="playhead" 
+            :style="{ transform: `translateX(${currentTime * pixelsPerSecond}px)` }"
+            @mousedown="handlePlayheadMouseDown"
+          >
+            <div class="playhead-line" :style="{ 
+              height: `calc(${trackAreaHeight} + 30px)`,
+              background: playheadColor,
+              boxShadow: playheadShadow
+            }"></div>
+          </div>
+
+          <div
+            ref="waveformContainer"
+            class="waveform-track"
+            :style="{ width: waveformWidth + 'px', height: waveformHeight + 'px' }"
+          >
+            <div v-if="!videoSrc" class="waveform-placeholder">
+              Caricamento video...
+            </div>
+          </div>
+
+          <!-- Original track -->
+          <template v-if="hasOriginal">
+            <div 
+              v-for="sub in processedSubtitles" 
+              :key="'orig-' + sub.id"
+              class="sub-block sub-block-orig"
+              :class="{ 
+                'sub-block-dragging': draggingSubtitle?.id === sub.id || resizingSubtitle?.id === sub.id,
+                'sub-block-sidebar-active': activeSidebarTrack === 'orig',
+                'sub-block-active': isSubtitleActive(sub),
+                'sub-block-orig-active': isSubtitleActive(sub),
+              }"
+              :style="{ 
+                position: 'absolute',
+                left: '0px',
+                top: origTop,
+                width: (sub.duration * pixelsPerSecond) + 'px',
+                transform: `translateX(${sub.start * pixelsPerSecond}px)` 
+              }"
+              :title="sub.originalTimestamp"
+              @click="handleSubtitleClick(sub, 'orig')"
+              @mousedown="(e) => handleSubtitleMouseDown(e, sub, null, 'orig')"
+            >
+              <div 
+                class="resize-handle resize-handle-left"
+                @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'left', 'orig')"
+              ></div>
+              <span class="sub-block-text">{{ sub.text }}</span>
+              <div 
+                class="resize-handle resize-handle-right"
+                @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'right', 'orig')"
+              ></div>
+            </div>
+          </template>
+          
+          <!-- Translated track -->
+          <template v-if="hasTranslation">
+            <div 
+              v-for="sub in processedTranSubtitles" 
+              :key="'tran-' + sub.id"
+              class="sub-block sub-block-tran"
+              :class="{ 
+                'sub-block-active': isSubtitleActive(sub),
+                'sub-block-dragging': draggingSubtitle?.id === sub.id || resizingSubtitle?.id === sub.id,
+                'sub-block-sidebar-active': activeSidebarTrack === 'tran',
+                'sub-block-tran-active': isSubtitleActive(sub),
+              }"
+              :style="{ 
+                position: 'absolute',
+                left: '0px',
+                top: tranTop,
+                width: (sub.duration * pixelsPerSecond) + 'px',
+                transform: `translateX(${sub.start * pixelsPerSecond}px)` 
+              }"
+              :title="sub.originalTimestamp"
+              @click="handleSubtitleClick(sub, 'tran')"
+              @mousedown="(e) => handleSubtitleMouseDown(e, sub, null, 'tran')"
+            >
+              <div 
+                class="resize-handle resize-handle-left"
+                @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'left', 'tran')"
+              ></div>
+              <span class="sub-block-text">{{ sub.text }}</span>
+              <div 
+                class="resize-handle resize-handle-right"
+                @mousedown.stop="(e) => handleSubtitleMouseDown(e, sub, 'right', 'tran')"
+              ></div>
+            </div>
+          </template>
+        </div>
+      </div>
+
     </div>
   </div>
 </template>
 
 <style scoped>
+/* ─── Layout principale ──────────────────────────────────────────────────────── */
 .container {
   display: grid;
   grid-template-columns: 10% 90%;
@@ -763,12 +899,229 @@ onUnmounted(() => {
   height: 100%;
 }
 
+/* Colonna sinistra: label tracce */
 .left {
-  padding-top: 30px;  
+  padding-top: 52px; /* 30px originali + 22px altezza minimap */
   display: grid;
   align-items: center;
 }
 
+/* Colonna destra: flex verticale — minimap sopra, timeline sotto */
+.timeline-column {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ─── Minimap ────────────────────────────────────────────────────────────────── */
+.minimap {
+  position: relative;          /* NON sticky, NON fixed — è fuori dallo scroll */
+  width: 100%;
+  height: 22px;
+  flex-shrink: 0;
+  background: #0d1017;
+  border-bottom: 1px solid #2a2f3a;
+  cursor: crosshair;
+  user-select: none;
+  overflow: hidden;
+}
+
+.minimap-seg {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 1px;
+  min-width: 2px;
+}
+
+.minimap-seg-orig {
+  top: 4px;
+  height: 6px;
+  background: rgba(142, 73, 160, 0.85);
+}
+
+.minimap-seg-tran {
+  top: 13px;
+  height: 6px;
+  background: rgba(59, 131, 246, 0.85);
+}
+
+.minimap-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  transform: translateX(-50%);
+  background: v-bind(playheadColor);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.minimap-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 2;
+  box-sizing: border-box;
+  transition: background 0.1s;
+}
+
+.minimap-thumb-dragging {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+.minimap:active .minimap-thumb {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+/* ─── Timeline scrollabile ───────────────────────────────────────────────────── */
+.timeline-wrapper {
+  flex: 1;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background-color: #1c2331;
+  border-top: 1px solid #333;
+  position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: #444 #111;
+}
+
+/* ─── Righello ───────────────────────────────────────────────────────────────── */
+.ruler {
+  height: 30px;
+  position: relative;
+  background-color: #1c2331;
+  border-bottom: 1px solid #333;
+}
+
+.marker-group {
+  position: absolute;
+  top: 0;
+  height: 100%;
+}
+
+.time-label {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 10px;
+  color: #888;
+  font-family: monospace;
+}
+
+.tick-major {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 8px;
+  background: #555;
+}
+
+/* ─── Track area ─────────────────────────────────────────────────────────────── */
+.track-area {
+  position: relative;
+  background-color: #1c2331;
+  background-image: linear-gradient(to right, #222 1px, transparent 1px);
+  background-size: v-bind('pixelsPerSecond + "px"') 100%;
+}
+
+.waveform-track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background-color: #1c2331;
+  border-bottom: 1px solid #333;
+  pointer-events: none;
+  user-select: none;
+  overflow: hidden;
+}
+
+.waveform-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #666;
+  font-size: 12px;
+}
+
+.waveform-track :deep(canvas) {
+  display: block !important;
+  width: 100% !important;
+  height: v-bind('waveformHeight + "px"') !important;
+  background: transparent !important;
+}
+
+.waveform-track :deep(audio) {
+  display: none !important;
+}
+
+.waveform-track :deep(wave) {
+  overflow: hidden !important;
+}
+
+/* ─── Playhead ───────────────────────────────────────────────────────────────── */
+.playhead {
+  position: absolute;
+  top: -30px;
+  left: 0;
+  z-index: 100;
+  pointer-events: all;
+  cursor: grab;
+}
+
+.playhead:active {
+  cursor: grabbing;
+}
+
+.playhead-line {
+  width: 2px;
+  background: #ff4500;
+  box-shadow: 0 0 5px rgba(255, 69, 0, 0.5);
+}
+
+/* ─── Tooltip ────────────────────────────────────────────────────────────────── */
+.playhead-tooltip {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  background: #1e1e1e;
+  border: 1px solid #555;
+  color: #e0e0e0;
+  font-size: 11px;
+  font-family: monospace;
+  padding: 3px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  z-index: 200;
+}
+
+.subtitle-drag-tooltip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  margin-top: -4px;
+  background: #1e1e1e;
+  border: 1px solid #555;
+  color: #e0e0e0;
+  font-size: 11px;
+  font-family: monospace;
+  padding: 3px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+}
+
+/* ─── Label tracce ───────────────────────────────────────────────────────────── */
 .waveform-label {
   font-size: 14px;
   color: #b0afaf;
@@ -816,105 +1169,7 @@ onUnmounted(() => {
   background: rgba(18, 83, 163, 0.15) !important;
 }
 
-.timeline-wrapper {
-  width: 100%;
-  overflow-x: auto;
-  background-color: #1c2331;
-  border-top: 1px solid #333;
-  position: relative;
-  scrollbar-width: thin;
-  scrollbar-color: #444 #111;
-  scroll-behavior: smooth;
-}
-
-.ruler {
-  height: 30px;
-  position: relative;
-  background-color: #1c2331;
-  border-bottom: 1px solid #333;
-}
-
-.marker-group {
-  position: absolute;
-  top: 0;
-  height: 100%;
-}
-
-.time-label {
-  position: absolute;
-  top: 2px;
-  left: 4px;
-  font-size: 10px;
-  color: #888;
-  font-family: monospace;
-}
-
-.tick-major {
-  position: absolute;
-  bottom: 0;
-  width: 1px;
-  height: 8px;
-  background: #555;
-}
-
-.track-area {
-  position: relative;
-  background-color: #1c2331;
-  background-image: linear-gradient(to right, #222 1px, transparent 1px);
-  background-size: v-bind('pixelsPerSecond + "px"') 100%;
-}
-
-.waveform-track {
-  position: absolute;
-  top: 0;
-  left: 0;
-  background-color: #1c2331;
-  border-bottom: 1px solid #333;
-  pointer-events: none;
-  user-select: none;
-  overflow: hidden;
-}
-
-.waveform-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #666;
-  font-size: 12px;
-}
-
-.waveform-track :deep(canvas) {
-  display: block !important;
-  width: 100% !important;
-  height: v-bind('waveformHeight + "px"') !important;
-  background: transparent !important;
-}
-
-.waveform-track :deep(audio) {
-  display: none !important;
-}
-
-.playhead {
-  position: absolute;
-  top: -30px;
-  left: 0;
-  z-index: 100;
-  pointer-events: all;
-  cursor: grab;
-}
-
-.playhead:active {
-  cursor: grabbing;
-}
-
-.playhead-line {
-  width: 2px;
-  background: #ff4500;
-  box-shadow: 0 0 5px rgba(255, 69, 0, 0.5);
-  /* height set dynamically via :style */
-}
-
+/* ─── Blocchi subtitle ───────────────────────────────────────────────────────── */
 .sub-block {
   height: 40px;
   border-radius: 4px;
@@ -932,47 +1187,13 @@ onUnmounted(() => {
   user-select: none;
 }
 
-.playhead-tooltip {
-  position: absolute;
-  top: 4px;
-  transform: translateX(-50%);
-  background: #1e1e1e;
-  border: 1px solid #555;
-  color: #e0e0e0;
-  font-size: 11px;
-  font-family: monospace;
-  padding: 3px 7px;
-  border-radius: 4px;
-  white-space: nowrap;
-  pointer-events: none;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-  z-index: 200;
-}
-
-.subtitle-drag-tooltip {
-  position: absolute;
-  transform: translate(-50%, -100%);
-  margin-top: -4px;
-  background: #1e1e1e;
-  border: 1px solid #555;
-  color: #e0e0e0;
-  font-size: 11px;
-  font-family: monospace;
-  padding: 3px 7px;
-  border-radius: 4px;
-  white-space: nowrap;
-  pointer-events: none;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  z-index: 200;
-}
-
 .sub-block-tran {
   background: rgba(59, 131, 246, 0.5);
   border: 1px solid #3b82f6;
 }
 
 .sub-block-tran:hover {
-  background: rgba(59, 131, 246, 0.83)
+  background: rgba(59, 131, 246, 0.83);
 }
 
 .sub-block-orig {
@@ -1006,7 +1227,7 @@ onUnmounted(() => {
 }
 
 .sub-block-tran-active {
-  background: rgba(83, 148, 253, 0.83)
+  background: rgba(83, 148, 253, 0.83);
 }
 
 .sub-block-text {
@@ -1019,11 +1240,7 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-.waveform-track :deep(wave) {
-  overflow: hidden !important;
-}
-
-
+/* ─── Resize handle ──────────────────────────────────────────────────────────── */
 .resize-handle {
   position: absolute;
   top: 0;

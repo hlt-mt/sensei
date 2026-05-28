@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref, provide, nextTick, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import subTimeline from '../components/subTimeline.vue'
+import { isNormal, isLite, isUltraLite } from '../config'
 
 const router = useRouter()
 
@@ -585,7 +586,13 @@ const confirmBackSave = async () => {
   clearProjectStorage()
   document.body.classList.remove('light-mode')
   isDarkMode.value = true
-  router.push('/myprojects')
+  if(!isUltraLite){
+    router.push('/myprojects')
+  }
+  else if (isUltraLite){
+    router.push('/formView')
+  }
+  
 }
 
 const confirmBackNoSave = () => {
@@ -859,7 +866,7 @@ watch(videoPlayer, (newPlayer) => { if (newPlayer) setupVideoSync() })
           Undo
         </button>
         
-        <button class="btn-save" @click="handleSave" :disabled="isSaving">
+        <button v-if="!isUltraLite" class="btn-save" @click="handleSave" :disabled="isSaving">
           <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16">
             <path d="M2 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H9.5a1 1 0 0 0-1 1v7.293l2.646-2.647a.5.5 0 0 1 .708.708l-3.5 3.5a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L7.5 9.293V2a2 2 0 0 1 2-2H14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h2.5a.5.5 0 0 1 0 1z"/>
           </svg>
@@ -1155,6 +1162,7 @@ watch(videoPlayer, (newPlayer) => { if (newPlayer) setupVideoSync() })
 .logo_photo{
   height: 40px;
   width: 40px;
+  margin-right: 12px;
 }
 .nav { display: flex; gap: 1rem; }
 
@@ -1351,7 +1359,6 @@ watch(videoPlayer, (newPlayer) => { if (newPlayer) setupVideoSync() })
   background: #151a24; border-left: 4px solid #3b82f6;
   border-radius: 4px; transition: all 0.3s ease; cursor: pointer;
 }
-.badge-orig ~ .subtitles-scroll .subtitle-block { border-left-color: #00aa8c; }
 .subtitle-block:hover { background: #353841; }
 .subtitle-block-active { background: #3a4a5a !important; box-shadow: 0 0 8px #3b82f6; transform: scale(1.02); border-radius: 4px; }
 

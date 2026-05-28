@@ -9,6 +9,7 @@
 import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import axios from 'axios';
+import { isNormal, isLite, isUltraLite } from '../config'
 
 const SERVICE_BASE = import.meta.env.VITE_SERVICE_BASE || 'https://api.matita.net/subtitles-admin'
 
@@ -17,8 +18,8 @@ const router = useRouter();
 onMounted(async () => {
   const token = localStorage.getItem('subtitles_token');
 
-  // Se non c'è il token, vai direttamente al login senza chiamare l'API
-  if (!token) {
+  if(!isUltraLite){
+    if (!token) {
     router.replace('/login');
     return;
   }
@@ -44,6 +45,12 @@ onMounted(async () => {
     localStorage.removeItem('subtitles_token'); 
     router.replace('/login');
   }
+  }
+
+  else if(isUltraLite){
+    router.replace('/formView');
+  }
+  
 });
 </script>
 
