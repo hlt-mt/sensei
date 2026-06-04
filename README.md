@@ -2,23 +2,22 @@
 Sensei – Web GUI to manage AI Subtitle Generator &amp; Translator
 
 
-Il progetto è composto da:
+Two are the components:
 
 - **Frontend** (Vue 3 + Vite)
 - **Backend** (FastAPI + SQLAlchemy)
 
 ---
 
-## ✨ Funzionalità
+## Functionalities
 
-- 🎙️ Generazione automatica dei sottotitoli nella lingua originale del video
-- 🌍 Traduzione automatica dei sottotitoli in altre lingue
-- ✏️ Editor integrato per modificare testo e timing
-- ⚡ Avvio rapido in ambiente di sviluppo
+- ️Automatic generation of transcription subtitles (in the language spoken in the video)
+- Automatic generation of translation subtitles, in a target language
+- Integrated editor to modify subtitle text and time stamps
 
 ---
 
-## 🚀 Tech Stack
+## Tech Stack
 
 Frontend:
 - Vue 3
@@ -34,41 +33,41 @@ Backend:
 
 ---
 
-## 📦 Installazione
+## Installation
 
-Clona la repository:
+Clone the repo:
 
 ```bash
-git clone https://github.com/eliasoliman/senseiDemo.git
-cd senseiDemo
+git clone https://github.com/hlt-mt/sensei.git
+cd sensei
 ```
 
 ---
 
-## 🧩 Frontend
+## Frontend
 
-### Installazione
+### Installation
 
 ```bash
 cd frontend
 npm install
 ```
 
-### Avvio in sviluppo
+### Start in development
 
 ```bash
 npm run dev
 ```
 
-Vite avvierà automaticamente il server di sviluppo (solitamente su http://localhost:5173).
+Vite automatically start the development server (by default on http://localhost:5173).
 
 ---
 
-## 🧠 Backend
+## Backend
 
-API sviluppata con FastAPI, con autenticazione JWT e gestione utenti/progetti. La documentazione Swagger è disponibile su `/docs`.
+API developed with FastAPI, with JWT authentication and user/project management. Swagger doc available on `/docs`.
 
-### Installazione
+### Installation
 
 ```bash
 cd backend
@@ -77,43 +76,43 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Avvio in sviluppo
+### Start in development
 
 ```bash
 uvicorn backend.main:app --reload
 ```
 
-### Variabili d'ambiente
+### Environment variables
 
-Le variabili sono lette da `.env` (opzionale).
+Environment variables are read from the (optional) file `.env`.
 
-Per il frontend (`frontend/.env`):
+Frontend environment variables (`frontend/.env`):
 
-- `VITE_WHISPER_BASE`: base URL del servizio Whisper
-- `VITE_ENDPOINT_POST`: endpoint per creare il progetto di sottotitolazione/traduzione
-- `VITE_ENDPOINT_STATUS`: endpoint per lo stato della trascrizione/traduzione
-- `VITE_ENDPOINT_OUT`: endpoint per fare retrieving dei sottotitoli trascritti
-- `VITE_ENDPOINT_TRANSLATED`: endpoint per fare retrieving dei sottotitoli tradotti
+- `VITE_WHISPER_BASE`: base URL of the subtitler system
+- `VITE_ENDPOINT_POST`: endpoint to create a subtitling project
+- `VITE_ENDPOINT_STATUS`: endpoint to check the state of the subtitling project
+- `VITE_ENDPOINT_OUT`: endpoint to retrieve the project transcription subtitles
+- `VITE_ENDPOINT_TRANSLATED`: endpoint to retrieve the project translation subtitles
 - `VITE_REQUIRE_SOURCE_LANG`: `true/false` se il provider richiede la lingua sorgente
-- `VITE_WHISPER_TOKEN`: token autenticazione Whisper
-- `VITE_AUDIO_EXTRACTION_TOKEN`: token estrazione audio
+- `VITE_WHISPER_TOKEN`: token subtitler system authentication
+- `VITE_AUDIO_EXTRACTION_TOKEN`: audio extraction token
 
-Per il backend (`backend/.env`):
+Backend environment variables (`backend/.env`):
 
-- `SECRET_KEY`: chiave per JWT (default: `change-me`)
-- `ADMIN_EMAIL`: email dell'admin bootstrap (default: `admin@example.com`)
-- `ADMIN_PASSWORD`: password admin (se vuota viene generata automaticamente)
-- `DB_URL`: stringa di connessione (default: SQLite in-memory)
-- `PASSWORD_LENGTH`: lunghezza minima password (default: 8)
-- `JWT_ALGORITHM`: algoritmo JWT (default: `HS256`)
+- `SECRET_KEY`: JWT key (default: `change-me`)
+- `ADMIN_EMAIL`: admin bootstrap email (default: `admin@example.com`)
+- `ADMIN_PASSWORD`: admin password (automatically generated if empty)
+- `DB_URL`: connection string (default: SQLite in-memory)
+- `PASSWORD_LENGTH`: password minimum length (default: 8)
+- `JWT_ALGORITHM`: JWT algorithm (default: `HS256`)
 
 
 ---
 
-## 🧠 Workflow dell'applicazione
+## Application workflow
 
-1. L’utente carica un file video
-2. Il sistema genera automaticamente i sottotitoli nella lingua originale
-3. I sottotitoli vengono automaticamente tradotti
-4. L’utente può modificarli tramite l’editor integrato
-5. Esportazione dei sottotitoli
+1. A video file is loaded
+2. The system automatically generates the transcription subtitles
+3. Transcription subtitles are automatically translated
+4. Both transcription and translation subtitles can be modified by the user by means of the integrated editor
+5. Both transcription and translation subtitles are exported as srt files 
