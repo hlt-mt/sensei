@@ -36,7 +36,7 @@ The system requires:
 
 The following files are to be downloaded:
 1. the docker image sensei_gui v1.0 [image.sensei_gui__v1_0.tar.gz (0.2 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQA1xOuMyMXmRqm7xKrDtg9qAd4eJ80BBwp0FppRB2KYF1o?e=oWohus)
-2. the software [sw.tar.gz (0.02 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQChqyMJutSVS53KUtR6EAjIAUFRtY2cTBEBTkb-7LtvOwQ?e=2xmQmP)
+2. the software [sw_ULTRALITE.tar.gz (0.02 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQBkt4JBE_hPTYb6eYijWZ3WAdlEV-EoCUy0UOrDqWDmSYk?e=5BzMzR)
 
 
 
@@ -53,7 +53,7 @@ Create a directory (p.es. $HOME/sensei) and extract there the software:
 ```
 mkdir -p $HOME/sensei
 cd $HOME/sensei
-tar xvfz sw.tar.gz
+tar xvfz sw_ULTRALITE.tar.gz
 ```
 
 
