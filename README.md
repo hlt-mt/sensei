@@ -62,13 +62,40 @@ docker load < image.sensei_backend__v1_0.tar.gz
 docker load < image.sensei_gui__v1_0.tar.gz
 ```
 
-
 ### Add cache models
 ```
 cd $HOME/.cache
 tar xvfz cache_huggingface.tar.gz
 tar xvfz cache_shas-whisper.tar.gz
 ```
+
+### Add software
+Create a directory (p.es. $HOME/sensei) and extract there the software:
+```
+mkdir -p $HOME/sensei
+cd $HOME/sensei
+tar xvfz sw_FULL.tar.gz
+```
+
+
+## Usage
+
+In order to utilize the sensei system, you need to start it with the following command:
+
+```
+bash DO_sensei_start.sh
+```
+
+Then in your browser open the following URL:
+```
+localhost:5173
+```
+
+After using sensei, please end the system with following command:
+```
+bash DO_sensei_end.sh
+```
+
 
 ## Application workflow
 
