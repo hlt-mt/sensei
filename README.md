@@ -33,81 +33,42 @@ Backend:
 
 ---
 
+## Requirements
+
+The system requires:
+1. a working docker installation (tested with version 29.1.4)
+
+
+## Download
+
+The following files are to be downloaded:
+1. the HuggingFace cache archive [cache_huggingface.tar.gz (11.5 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQCPmGMLVcCoR7yyfpCfrK-GAXFjaRjMU71Z_oNkCVrv0iA?e=l9Aeal)
+2. the SHAS and WHISPER cache archive [cache_shas-whisper.tar.gz (3.2 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQBZc9bKSI-HQoHluxjdLcgOAdynPSb-dokQk6-hht9DHLQ?e=XvcQSs)
+3. the docker image SHHE v5.1 [image.shhe_v5-1.tar.gz (7.4 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQAJXMTrSn6ZS4vFlFQ-pwEmAc-dkH7O2Hr0R11CYVoRYhU?e=VUfeEj)
+4. the docker image WHMA v5.1 [image.whma_v5-1.tar.gz (8.6 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQAcROjBLY0qTpCr7LSMDlRBAUaBE3ixpEwR9Ask0StkK4I?e=tU8GDP)
+5. the docker image sensei_backend v1.0 [image.sensei_backend__v1_0.tar.gz (0.3 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQCmkbaK9yzcQqOGW0SIIuTYAe5d-0JVUiUTMkdWRa8uXuw?e=w7SHOy)
+6. the docker image sensei_gui v1.0 [image.sensei_gui__v1_0.tar.gz (0.2 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQA1xOuMyMXmRqm7xKrDtg9qAd4eJ80BBwp0FppRB2KYF1o?e=oWohus)
+7. the software [sw_FULL.tar.gz (0.02 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQChqyMJutSVS53KUtR6EAjIAUFRtY2cTBEBTkb-7LtvOwQ?e=2xmQmP)
+
+
 ## Installation
 
-Clone the repo:
-
-```bash
-git clone https://github.com/hlt-mt/sensei.git
-cd sensei
+### Add docker images
+Add the four dowloaded docker images to the docker environment with the following commands:
+```
+docker load < image.shhe-v5-1.tar.gz
+docker load < image.whma-v5-1.tar.gz
+docker load < image.sensei_backend__v1_0.tar.gz
+docker load < image.sensei_gui__v1_0.tar.gz
 ```
 
----
 
-## Frontend
-
-### Installation
-
-```bash
-cd frontend
-npm install
+### Add cache models
 ```
-
-### Start in development
-
-```bash
-npm run dev
+cd $HOME/.cache
+tar xvfz cache_huggingface.tar.gz
+tar xvfz cache_shas-whisper.tar.gz
 ```
-
-Vite automatically start the development server (by default on http://localhost:5173).
-
----
-
-## Backend
-
-API developed with FastAPI, with JWT authentication and user/project management. Swagger doc available on `/docs`.
-
-### Installation
-
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-### Start in development
-
-```bash
-uvicorn backend.main:app --reload
-```
-
-### Environment variables
-
-Environment variables are read from the (optional) file `.env`.
-
-Frontend environment variables (`frontend/.env`):
-
-- `VITE_WHISPER_BASE`: base URL of the subtitler system
-- `VITE_ENDPOINT_POST`: endpoint to create a subtitling project
-- `VITE_ENDPOINT_STATUS`: endpoint to check the state of the subtitling project
-- `VITE_ENDPOINT_OUT`: endpoint to retrieve the project transcription subtitles
-- `VITE_ENDPOINT_TRANSLATED`: endpoint to retrieve the project translation subtitles
-- `VITE_REQUIRE_SOURCE_LANG`: `true/false` se il provider richiede la lingua sorgente
-- `VITE_WHISPER_TOKEN`: token subtitler system authentication
-- `VITE_AUDIO_EXTRACTION_TOKEN`: audio extraction token
-
-Backend environment variables (`backend/.env`):
-
-- `SECRET_KEY`: JWT key (default: `change-me`)
-- `ADMIN_EMAIL`: admin bootstrap email (default: `admin@example.com`)
-- `ADMIN_PASSWORD`: admin password (automatically generated if empty)
-- `DB_URL`: connection string (default: SQLite in-memory)
-- `PASSWORD_LENGTH`: password minimum length (default: 8)
-- `JWT_ALGORITHM`: JWT algorithm (default: `HS256`)
-
-
----
 
 ## Application workflow
 
