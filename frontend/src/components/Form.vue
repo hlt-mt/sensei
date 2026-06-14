@@ -205,7 +205,7 @@ function isLogged() {
 
 onMounted(() => {
   const pending = localStorage.getItem('pendingProject')
-  if (pending && isLogged()) {
+  if (pending && (isUltraLite || isLogged())) {
     const { savedProjectName, savedTargetLanguage } = JSON.parse(pending)
     projectName.value = savedProjectName || ''
     targetLanguage.value = savedTargetLanguage || ''
@@ -280,7 +280,7 @@ function handleCreate() {
       alert('Carica il file video.')
       return
     }
-    if (!isLogged()) {
+    if (!isUltraLite && !isLogged()) {
       localStorage.setItem('pendingProject', JSON.stringify({
         savedProjectName: projectName.value,
         savedTargetLanguage: targetLanguage.value,
