@@ -205,7 +205,7 @@ function isLogged() {
 
 onMounted(() => {
   const pending = localStorage.getItem('pendingProject')
-  if (pending && isLogged()) {
+  if (pending && (isUltraLite || isLogged())) {
     const { savedProjectName, savedTargetLanguage } = JSON.parse(pending)
     projectName.value = savedProjectName || ''
     targetLanguage.value = savedTargetLanguage || ''
@@ -280,7 +280,7 @@ function handleCreate() {
       alert('Carica il file video.')
       return
     }
-    if (!isLogged()) {
+    if (!isUltraLite && !isLogged()) {
       localStorage.setItem('pendingProject', JSON.stringify({
         savedProjectName: projectName.value,
         savedTargetLanguage: targetLanguage.value,
@@ -348,6 +348,8 @@ async function createProjectFromSrt() {
       })
       createdProject = projectRes.data  
       console.log('[NewProject SRT] Progetto salvato:', createdProject)
+    } else {
+      createdProject = { name: projectName.value }
     }
 
     loading.value = false
@@ -355,9 +357,11 @@ async function createProjectFromSrt() {
     localStorage.setItem('subtitles', JSON.stringify(subtitles))
     localStorage.setItem('tranSubtitles', JSON.stringify(tranSubtitles))
 
-    if (createdProject) {
-      localStorage.setItem('currentProjectId', createdProject.id)
+    if (createdProject?.name) {
       localStorage.setItem('currentProjectName', createdProject.name)
+    }
+    if (createdProject?.id) {
+      localStorage.setItem('currentProjectId', createdProject.id)
       localStorage.setItem('currentProjectUserId', createdProject.user_id)
     }
 
