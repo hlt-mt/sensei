@@ -36,8 +36,8 @@ The system requires:
 
 The following files are to be downloaded:
 1. the docker image sensei_gui v1.0:
-1.1 non-macOS users: [image.sensei_gui__v1_0.tar.gz (0.43 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQCd3H9b2OLXQKXW1JyIEfkaAdqv206YX8FLVJ0eJNdMRrE?e=e744SY)
-1.2 macOS users: [MAC.image.sensei_gui__v1_0.tar.gz (1.08 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQAUCqdx6EGUTJx0x6XGspbJAekRjHopqX2nxW-1EPkCUVo?e=ocaY8M)
+   * non-macOS users: [image.sensei_gui__v1_0.tar.gz (0.43 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQCd3H9b2OLXQKXW1JyIEfkaAdqv206YX8FLVJ0eJNdMRrE?e=e744SY)
+   * macOS users: [MAC.image.sensei_gui__v1_0.tar.gz (1.08 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQAUCqdx6EGUTJx0x6XGspbJAekRjHopqX2nxW-1EPkCUVo?e=ocaY8M)
 2. the software [sw_ULTRALITE.tar.gz (0.02 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQAak5ah_cNnSa08lnKZSH89ATsH2n_r8oxY6jmUzxa1nh4?e=GCX2QZ)
 
 
