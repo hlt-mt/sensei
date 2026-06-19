@@ -76,8 +76,9 @@ docker load < MAC.image.shhe-v5_1.tar.gz
 docker load < MAC.image.whma-v5_1.tar.gz
 docker load < MAC.image.sensei_backend__v1_0.tar.gz
 docker load < MAC.image.sensei_gui__v1_0.tar.gz
+```
 
-then add tag to the latest version for each of them:
+then add tag to the latest version for each image:
 
 ```
 docker tag shhe:v5.1 shhe:latest
