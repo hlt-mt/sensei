@@ -45,6 +45,7 @@ The following archives are to be downloaded:
 1. the HuggingFace cache archive [cache_huggingface.tar.gz (11.5 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQCPmGMLVcCoR7yyfpCfrK-GAXFjaRjMU71Z_oNkCVrv0iA?e=l9Aeal)
 2. the SHAS and WHISPER cache archive [cache_shas-whisper.tar.gz (3.2 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQBZc9bKSI-HQoHluxjdLcgOAdynPSb-dokQk6-hht9DHLQ?e=XvcQSs)
 3. the software [sw_FULL.tar.gz (0.7 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQCxJQPMwO9yTKdJbOIoZ2ltAWfuGs6xd9-M04htyWa2Pto?e=Cm5ceE)
+
 and the following docker images:
 * non-macOS users:
    1. [image.shhe_v5-1.tar.gz (7.4 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQAJXMTrSn6ZS4vFlFQ-pwEmAc-dkH7O2Hr0R11CYVoRYhU?e=VUfeEj)
