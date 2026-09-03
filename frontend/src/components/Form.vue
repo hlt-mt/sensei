@@ -36,18 +36,32 @@
         <select class="form-select mb-3" v-model="sourceLanguage">
           <option value="auto" v-if="!isAzureMode" selected="selected">[Auto-detect]</option>
           <option value="" v-else>[Select source language]</option>
+          <option value="bg">Bulgarian</option>
           <option value="de">German</option>
+          <option value="el">Greek</option>
           <option value="en">English</option>
           <option value="es">Spanish</option>
+          <option value="fr">French</option>
           <option value="it">Italian</option>
+          <option value="nl">Dutch</option>
+          <option value="pl">Polish</option>
+          <option value="sl">Slovenian</option>
+          <option value="uk">Ukrainian</option>
         </select>
         <p>Target language</p>
         <select class="form-select mb-3" v-model="targetLanguage">
           <option value="">[Select the language]</option>
+          <option value="bg">Bulgarian</option>
           <option value="de">German</option>
+          <option value="el">Greek</option>
           <option value="en">English</option>
           <option value="es">Spanish</option>
+          <option value="fr">French</option>
           <option value="it">Italian</option>
+          <option value="nl">Dutch</option>
+          <option value="pl">Polish</option>
+          <option value="sl">Slovenian</option>
+          <option value="uk">Ukrainian</option>
         </select>
       </div>
 
