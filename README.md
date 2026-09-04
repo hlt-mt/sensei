@@ -51,7 +51,7 @@ and the following docker images:
    1. [image.shhe_v5-1.tar.gz (7.4 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQAJXMTrSn6ZS4vFlFQ-pwEmAc-dkH7O2Hr0R11CYVoRYhU?e=VUfeEj)
    2. [image.whma_v5-1.tar.gz (8.6 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQAcROjBLY0qTpCr7LSMDlRBAUaBE3ixpEwR9Ask0StkK4I?e=tU8GDP)
    3. [image.sensei_backend__v1_0.tar.gz (0.3 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQCpVnG6q0BnTaOOddg3P9A-AVOZ49G1KUoA_P2HBtHJJGc?e=jyxqdO)
-   4. [image.sensei_gui__v1_0.tar.gz (0.43 GB)]((https://fbk.sharepoint.com/:u:/s/MTUnit/IQCd3H9b2OLXQKXW1JyIEfkaAdqv206YX8FLVJ0eJNdMRrE?e=e744SY)
+   4. [image.sensei_gui__v1_1.tar.gz (0.43 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQBqef18JdZ8TZRnl4LL5pHGAUpxErUPI9izqMT3QPpv-8U?e=x6N7Uo)
 * macOS users:
    1. [MAC.image.shhe_v5-1.tar.gz (5.4 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQDMrdmeeYelTbxsfNje8L7_AU237b-C9vW7RwuGjZWTx9U?e=8JI1qe)
    2. [MAC.image.whma_v5-1.tar.gz (10.3 GB)](https://fbk.sharepoint.com/:u:/s/MTUnit/IQBiPZdh4_0ZS5iGNKl14NIvAQz0sxUNtJZSy-6CSSB-iHU?e=9r2IlF)
@@ -68,7 +68,7 @@ Add the four dowloaded docker images to the docker environment with the followin
 docker load < image.shhe-v5_1.tar.gz
 docker load < image.whma-v5_1.tar.gz
 docker load < image.sensei_backend__v1_0.tar.gz
-docker load < image.sensei_gui__v1_0.tar.gz
+docker load < image.sensei_gui__v1_1.tar.gz
 ```
 * macOS users:
 ```
@@ -84,7 +84,7 @@ then add tag to the latest version for each image:
 docker tag shhe:v5.1 shhe:latest
 docker tag whma:v5.1 whma:latest
 docker tag sensei_frontend:v1.0 sensei_frontend:latest
-docker tag sensei_gui:v1.0 sensei_gui:latest
+docker tag sensei_gui:v1.1 sensei_gui:latest
 
 
 ### Add cache models
